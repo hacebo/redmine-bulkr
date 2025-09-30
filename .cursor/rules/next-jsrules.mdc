@@ -1,0 +1,792 @@
+---
+description: Next.js development rules for BulkRedmine - Redmine time tracking app with server-side components, ShadCN UI, and Redmine API integration
+globs: ["app/**/*.{ts,tsx,js,jsx}"]
+alwaysApply: true
+---
+
+# Next.js Development Rules for BulkRedmine
+
+## Project Overview
+BulkRedmine is a time tracking application that integrates directly with Redmine API for bulk time entry management. All development should prioritize server-side components, clean API integration, and mobile-first design.
+
+## Core Principles
+
+### 1. Server-First Architecture
+- Use Server Components by default
+- Only use Client Components when necessary (forms, interactions)
+- Implement Server Actions for data mutations
+- Keep API calls on the server side
+
+### 2. Redmine API Integration
+- All data operations go through Redmine API
+- No local database - direct API integration
+- Use service layer for API abstraction
+- Handle API errors gracefully
+
+### 3. Mobile-First Design
+- All components must be responsive and touch-friendly
+- Prioritize mobile layouts over desktop
+- Use appropriate touch targets (minimum 44px)
+- Consider mobile performance constraints
+
+## File Structure & Organization
+
+### App Router Structure
+```
+app/
+├── (auth)/              # Authentication pages
+│   └── login/
+├── (dashboard)/         # Protected app pages
+│   └── dashboard/
+├── api/                 # API routes (if needed)
+├── lib/
+│   ├── actions/         # Server actions
+│   ├── services/        # API service layer
+│   └── utils/           # Helper functions
+└── components/
+    ├── ui/              # ShadCN UI components only
+    ├── forms/           # Form components
+    └── shared/          # Shared/reusable components
+```
+
+### Component Organization
+```
+app/
+├── components/
+│   ├── ui/              # ShadCN UI components only
+│   ├── forms/           # Form components
+│   ├── dashboard/       # Dashboard-specific components
+│   └── shared/          # Shared/reusable components
+├── lib/
+│   ├── actions/         # Server actions for data operations
+│   ├── services/        # Redmine API service layer
+│   └── utils/           # Helper functions
+└── hooks/               # Custom React hooks (minimal use)
+```
+
+## Component Development Rules
+
+### 1. React 19 Patterns
+- **Server Components First**: Start with server components, only use client components when needed
+- **use Hook**: Use React 19's `use` hook for data fetching in client components
+- **Hybrid Pattern**: Server component fetches data, passes promise to client component
+- **Server Actions**: Use server actions for all data mutations
+- **Component Boundaries**: Clear separation between server and client components
+- **Suspense Boundaries**: Always wrap async components with Suspense
+- **Loading States**: Provide meaningful loading skeletons for better UX
+- **Error Boundaries**: Handle errors gracefully with retry functionality
+
+### 2. ShadCN UI Components
+- **Only** install ShadCN UI components in `components/ui/`
+- **Never** create manual files in `components/ui/`
+- Always search ShadCN UI first before installing any package
+- Use `pnpm dlx shadcn@latest add [component-name]` to install
+- Customize components by extending the base ShadCN component
+
+### 3. Server Actions Pattern
+```typescript
+// app/lib/actions/time-entries.ts
+'use server';
+
+import { getCurrentUser } from './auth';
+import { RedmineService } from '../services/redmine';
+
+export async function createTimeEntry(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
+  try {
+    const redmineService = new RedmineService(
+      process.env.REDMINE_BASE_URL || '',
+      user.redmineApiKey
+    );
+
+    const timeEntry = {
+      time_entry: {
+        project_id: parseInt(formData.get('projectId') as string),
+        spent_on: formData.get('date') as string,
+        hours: parseFloat(formData.get('hours') as string),
+        activity_id: parseInt(formData.get('activityId') as string),
+        comments: formData.get('comments') as string,
+      }
+    };
+
+    return await redmineService.createTimeEntry(timeEntry);
+  } catch (error) {
+    console.error('Error creating time entry:', error);
+    throw new Error('Failed to create time entry. Please try again.');
+  }
+}
+```
+
+### 4. Service Layer Pattern
+```typescript
+// app/lib/services/redmine.ts
+export class RedmineService {
+  private baseUrl: string;
+  private apiKey: string;
+
+  constructor(baseUrl: string, apiKey: string) {
+    this.baseUrl = baseUrl;
+    this.apiKey = apiKey;
+  }
+
+  private async makeRequest(endpoint: string, options: RequestInit = {}) {
+    const url = `${this.baseUrl}${endpoint}`;
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'X-Redmine-API-Key': this.apiKey,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Redmine API error: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  async getTimeEntries(userId?: number, from?: string, to?: string) {
+    let endpoint = '/time_entries.json';
+    const params = new URLSearchParams();
+    
+    if (userId) params.append('user_id', userId.toString());
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    
+    if (params.toString()) {
+      endpoint += `?${params.toString()}`;
+    }
+
+    return this.makeRequest(endpoint);
+  }
+
+  async createTimeEntry(timeEntry: { time_entry: Record<string, unknown> }) {
+    return this.makeRequest('/time_entries.json', {
+      method: 'POST',
+      body: JSON.stringify(timeEntry),
+    });
+  }
+}
+```
+
+### 5. Form Development Rules
+
+#### Server Action Form Pattern
+```typescript
+// app/components/forms/TimeEntryForm.tsx
+'use client'
+
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
+import { createTimeEntry } from '@/app/lib/actions/time-entries'
+
+const timeEntrySchema = z.object({
+  projectId: z.number().min(1, 'Project is required'),
+  date: z.string().min(1, 'Date is required'),
+  hours: z.number().min(0, 'Hours must be positive'),
+  activityId: z.number().min(1, 'Activity is required'),
+  comments: z.string().optional(),
+})
+
+type TimeEntryFormData = z.infer<typeof timeEntrySchema>
+
+export function TimeEntryForm() {
+  const form = useForm<TimeEntryFormData>({
+    resolver: zodResolver(timeEntrySchema),
+    defaultValues: {
+      projectId: 0,
+      date: new Date().toISOString().split('T')[0],
+      hours: 0,
+      activityId: 0,
+      comments: '',
+    },
+  })
+
+  const handleSubmit = async (data: TimeEntryFormData) => {
+    try {
+      const formData = new FormData()
+      formData.append('projectId', data.projectId.toString())
+      formData.append('date', data.date)
+      formData.append('hours', data.hours.toString())
+      formData.append('activityId', data.activityId.toString())
+      formData.append('comments', data.comments || '')
+
+      await createTimeEntry(formData)
+      form.reset()
+    } catch (error) {
+      console.error('Error submitting form:', error)
+    }
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="hours"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Hours</FormLabel>
+              <FormControl>
+                <Input 
+                  type="number" 
+                  step="0.5"
+                  placeholder="8.0" 
+                  {...field}
+                  onChange={(e) => field.onChange(Number(e.target.value))}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        
+        <Button type="submit" className="w-full">
+          Submit Time Entry
+        </Button>
+      </form>
+    </Form>
+  )
+}
+```
+
+### 6. Page Development Rules
+
+#### Server Component Page with Promise Pattern (Recommended)
+```typescript
+// app/bulk-entry/page.tsx
+import { Suspense } from 'react'
+import { redirect } from 'next/navigation'
+import { getCurrentUser } from '@/app/lib/actions/auth'
+import { getProjects, getActivities } from '@/app/lib/actions/projects'
+import { getMonthlyTimeEntries } from '@/app/lib/actions/time-entries'
+import { BulkEntryClient } from '@/app/components/bulk-entry-client'
+import { DashboardLoadingSkeleton } from '@/app/components/loading-skeletons'
+import { format, startOfWeek, addDays } from 'date-fns'
+
+interface BulkEntryPageProps {
+  searchParams: Promise<{
+    projectId?: string
+    weekStart?: string
+  }>
+}
+
+export default async function BulkEntryPage({ searchParams }: BulkEntryPageProps) {
+  const user = await getCurrentUser()
+  
+  if (!user) {
+    redirect('/login')
+  }
+
+  // Await searchParams in Next.js 15
+  const params = await searchParams
+
+  // Calculate week period
+  const requestedDate = params.weekStart 
+    ? new Date(params.weekStart)
+    : new Date()
+  
+  const weekStart = startOfWeek(requestedDate, { weekStartsOn: 1 })
+  const weekEnd = addDays(weekStart, 13)
+  
+  const weekStartStr = format(weekStart, 'yyyy-MM-dd')
+  const weekEndStr = format(weekEnd, 'yyyy-MM-dd')
+
+  // Create promise for parallel data fetching
+  const dataPromise = Promise.all([
+    getProjects(),
+    getActivities(),
+    getMonthlyTimeEntries(weekStartStr, weekEndStr).catch(() => [])
+  ]).then(([projects, activities, timeEntries]) => {
+    const selectedProject = params.projectId
+      ? projects.find(p => p.id === parseInt(params.projectId || '0'))
+      : projects[0]
+
+    return {
+      projects,
+      activities,
+      timeEntries,
+      selectedProject: selectedProject || projects[0]
+    }
+  })
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Suspense fallback={<DashboardLoadingSkeleton />}>
+        <BulkEntryClient
+          dataPromise={dataPromise}
+          initialWeekStart={weekStartStr}
+        />
+      </Suspense>
+    </div>
+  )
+}
+```
+
+#### Client Component with use Hook Pattern (React 19)
+```typescript
+// app/components/bulk-entry-client.tsx
+'use client'
+
+import { use } from 'react'
+import { useRouter } from 'next/navigation'
+
+interface BulkEntryData {
+  projects: Project[]
+  activities: Activity[]
+  timeEntries: TimeEntry[]
+  selectedProject: Project
+}
+
+interface BulkEntryClientProps {
+  dataPromise: Promise<BulkEntryData>
+  initialWeekStart: string
+}
+
+export function BulkEntryClient({ dataPromise, initialWeekStart }: BulkEntryClientProps) {
+  // Use React 19's use hook to unwrap the promise
+  const { projects, activities, timeEntries, selectedProject } = use(dataPromise)
+  const router = useRouter()
+
+  const handleProjectChange = (projectId: string) => {
+    router.push(\`/bulk-entry?projectId=\${projectId}&weekStart=\${initialWeekStart}\`)
+  }
+
+  return (
+    <div>
+      {/* Component content */}
+    </div>
+  )
+}
+```
+
+#### Key Benefits of Promise + use Hook Pattern
+- **No loading states needed**: Suspense handles loading automatically
+- **No useEffect**: Data fetching happens on server, not in effect
+- **Type safe**: Full TypeScript support with proper typing
+- **Better performance**: Server-side data fetching, faster initial render
+- **Cleaner code**: Separation of concerns, less state management
+- **URL-driven**: Navigation triggers server refetch automatically
+
+#### Legacy Client Component with useEffect Pattern (Avoid for new code)
+```typescript
+// app/components/legacy-component.tsx
+'use client'
+
+import { useState, useEffect } from 'react'
+import { getProjects, getActivities } from '@/app/lib/actions/projects'
+
+// AVOID THIS PATTERN - Use Promise + use hook instead
+export function LegacyComponent() {
+  const [projects, setProjects] = useState([])
+  const [activities, setActivities] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [projectsData, activitiesData] = await Promise.all([
+          getProjects(),
+          getActivities()
+        ])
+        setProjects(projectsData)
+        setActivities(activitiesData)
+      } catch (error) {
+        console.error('Error loading data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [])
+
+  if (loading) {
+    return <div>Loading...</div>
+  }
+
+  return (
+    <div className="container mx-auto p-4 space-y-6">
+      {/* Dashboard content */}
+    </div>
+  )
+}
+```
+
+### 7. Mobile-First Design Patterns
+
+#### Responsive Layout Example
+```typescript
+'use client'
+
+export function ResponsiveComponent() {
+  return (
+    <div className="w-full min-h-screen">
+      <div className="max-w-6xl mx-auto p-2 sm:p-4 lg:p-6">
+        {/* Mobile: Stack vertically, Desktop: Horizontal */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button className="h-9 px-3">Button</button>
+          <select className="h-9">Option</select>
+        </div>
+        
+        {/* Horizontal scroll on mobile */}
+        <div className="overflow-x-auto -mx-2 sm:mx-0">
+          <div className="inline-block min-w-full">
+            <div className="grid gap-1 sm:gap-2" style={{ gridTemplateColumns: '80px repeat(14, minmax(40px, 56px))' }}>
+              {/* Grid content */}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+#### Touch-Friendly Component Sizes
+```typescript
+// Minimum touch targets
+<Button className="min-h-[44px] min-w-[44px]">OK</Button>
+
+// Responsive sizes
+<Button className="h-9 sm:h-10">Click</Button>  // 36px mobile, 40px desktop
+<Input className="h-9 sm:h-10" />                // Consistent heights
+
+// Text sizes
+<span className="text-xs sm:text-sm">Label</span>     // 12px → 14px
+<h1 className="text-lg sm:text-xl">Title</h1>         // 18px → 20px
+```
+
+#### Mobile Navigation Pattern
+```typescript
+'use client'
+
+import { useRouter } from 'next/navigation'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+
+export function BiWeeklyNavigation({ currentStart }: { currentStart: string }) {
+  const router = useRouter()
+  
+  const navigateWeek = (direction: 'prev' | 'next') => {
+    const current = new Date(currentStart)
+    const newStart = addDays(current, direction === 'next' ? 14 : -14)
+    const newStartStr = format(newStart, 'yyyy-MM-dd')
+    
+    router.push(\`/bulk-entry?weekStart=\${newStartStr}\`)
+  }
+  
+  return (
+    <div className="flex items-center gap-1">
+      <Button onClick={() => navigateWeek('prev')} className="h-9 w-9 p-0">
+        <ChevronLeft className="h-3 w-3" />
+      </Button>
+      <span className="text-xs sm:text-sm font-medium px-2">
+        Week Range
+      </span>
+      <Button onClick={() => navigateWeek('next')} className="h-9 w-9 p-0">
+        <ChevronRight className="h-3 w-3" />
+      </Button>
+    </div>
+  )
+}
+```
+
+## Authentication Rules
+
+### 1. Session Management
+```typescript
+// app/lib/actions/auth.ts
+'use server'
+
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+
+export async function getCurrentUser() {
+  const cookieStore = await cookies()
+  const sessionCookie = cookieStore.get('session')
+
+  if (!sessionCookie) {
+    return null
+  }
+
+  try {
+    const sessionData = JSON.parse(sessionCookie.value)
+    return {
+      redmineApiKey: sessionData.redmineApiKey,
+      redmineUserId: sessionData.redmineUserId,
+      redmineUserLogin: sessionData.redmineUserLogin,
+      redmineUserEmail: sessionData.redmineUserEmail,
+      redmineUserName: sessionData.redmineUserName,
+    }
+  } catch (error) {
+    console.error('Error parsing session:', error)
+    return null
+  }
+}
+
+export async function login(formData: FormData) {
+  const redmineApiKey = formData.get('redmineApiKey') as string
+
+  // Validate API key with Redmine
+  const response = await fetch(`${process.env.REDMINE_BASE_URL}/users/current.json`, {
+    headers: {
+      'X-Redmine-API-Key': redmineApiKey,
+      'Content-Type': 'application/json',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error('Invalid Redmine API key')
+  }
+
+  const data = await response.json()
+  const redmineUser = data.user
+
+  // Store session
+  const sessionData = {
+    redmineApiKey,
+    redmineUserId: redmineUser.id,
+    redmineUserLogin: redmineUser.login,
+    redmineUserEmail: redmineUser.mail,
+    redmineUserName: redmineUser.firstname + ' ' + redmineUser.lastname,
+  }
+
+  const cookieStore = await cookies()
+  cookieStore.set('session', JSON.stringify(sessionData), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 7, // 7 days
+  })
+
+  redirect('/dashboard')
+}
+```
+
+## Error Handling Rules
+
+### 1. API Error Handling
+```typescript
+// app/lib/services/redmine.ts
+private async makeRequest(endpoint: string, options: RequestInit = {}) {
+  try {
+    const url = `${this.baseUrl}${endpoint}`
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'X-Redmine-API-Key': this.apiKey,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    })
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Invalid API key or unauthorized')
+      }
+      if (response.status === 404) {
+        throw new Error('Resource not found')
+      }
+      throw new Error(`Redmine API error: ${response.status} ${response.statusText}`)
+    }
+
+    return response.json()
+  } catch (error) {
+    console.error('Redmine API request failed:', error)
+    throw error
+  }
+}
+```
+
+### 2. Server Action Error Handling
+```typescript
+// app/lib/actions/time-entries.ts
+export async function createTimeEntry(formData: FormData) {
+  try {
+    const user = await getCurrentUser()
+    if (!user) {
+      throw new Error('User not authenticated')
+    }
+
+    // ... API call logic
+  } catch (error) {
+    console.error('Error creating time entry:', error)
+    throw new Error('Failed to create time entry. Please try again.')
+  }
+}
+```
+
+## Performance Rules
+
+### 1. Server Component Optimization
+- Use Server Components for data fetching
+- Minimize client-side JavaScript
+- Implement proper caching strategies
+- Use Suspense for loading states
+
+### 2. API Optimization
+- Batch API calls when possible
+- Implement proper error handling
+- Use appropriate timeouts
+- Cache frequently accessed data
+
+## Security Rules
+
+### 1. API Key Security
+- Never expose API keys in client-side code
+- Use server-side API calls only
+- Implement proper session management
+- Validate all user inputs
+
+### 2. Data Validation
+- Use Zod for all input validation
+- Sanitize user inputs
+- Validate API responses
+- Implement proper error boundaries
+
+## Testing Rules
+
+### 1. Component Testing
+- Test server actions
+- Test error states
+- Mock Redmine API responses
+- Test form validation
+
+### 2. Integration Testing
+- Test Redmine API integration
+- Test authentication flow
+- Test error handling
+- Test data flow
+
+## Code Quality Rules
+
+### 1. TypeScript
+- Use strict TypeScript configuration
+- Define proper interfaces for all data
+- Avoid `any` types
+- Use proper type guards
+
+### 2. Code Style
+- Use consistent naming conventions
+- Implement proper error handling
+- Write self-documenting code
+- Use meaningful variable names
+
+### 3. Comments
+- Comment complex business logic
+- Document API integrations
+- Explain non-obvious code decisions
+- Keep comments up to date
+
+## Redmine Integration Rules
+
+### 1. API Patterns
+- Always use proper authentication headers
+- Handle API rate limits
+- Implement retry logic for failed requests
+- Cache static data (projects, activities)
+
+### 2. Data Mapping
+- Map Redmine data to consistent internal format
+- Handle missing or null values gracefully
+- Implement proper date formatting
+- Use consistent time zone handling
+
+## Quick Reference
+
+### Common Commands
+```bash
+# Install ShadCN UI component
+pnpm dlx shadcn@latest add button
+
+# Run development server
+pnpm dev
+
+# Build for production
+pnpm build
+
+# Type checking
+pnpm type-check
+```
+
+### Common Patterns
+- Always use Server Components first
+- Use Server Actions for data mutations
+- Implement proper error handling
+- Use ShadCN UI components
+- Follow mobile-first design
+- Abstract Redmine API calls
+- Implement proper authentication
+- Use TypeScript strictly
+- Handle loading states
+- Implement proper error boundaries
+
+## Environment Variables
+
+### Required Environment Variables
+```bash
+# .env.local
+REDMINE_BASE_URL=https://your-redmine-instance.com
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+## Deployment Rules
+
+### 1. Environment Variables
+- Use `.env.local` for local development
+- Never commit sensitive data
+- Use proper environment variable naming
+- Validate required environment variables
+
+### 2. Build Optimization
+- Optimize for production builds
+- Implement proper caching strategies
+- Use CDN for static assets
+- Minimize bundle size
+
+## Accessibility Rules
+
+### 1. WCAG Compliance
+- Implement proper ARIA labels
+- Ensure keyboard navigation
+- Maintain proper color contrast
+- Provide alternative text for images
+
+### 2. Mobile Accessibility
+- Ensure touch targets are large enough
+- Implement proper focus management
+- Test with screen readers
+- Consider mobile performance
+
+## Code Review Checklist
+
+### 1. Before Submitting
+- [ ] All tests pass
+- [ ] Code follows style guidelines
+- [ ] No console.log statements
+- [ ] Proper error handling
+- [ ] Mobile responsiveness tested
+- [ ] Performance impact assessed
+- [ ] Security review completed
+- [ ] Redmine API integration tested
+
+### 2. Review Criteria
+- [ ] Code readability
+- [ ] Performance implications
+- [ ] Security considerations
+- [ ] Accessibility compliance
+- [ ] Mobile optimization
+- [ ] Error handling
+- [ ] Documentation quality
+- [ ] Test coverage
+- [ ] Redmine API integration

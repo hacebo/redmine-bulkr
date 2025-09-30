@@ -1,0 +1,398 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CalendarIcon, Plus, Trash2, X } from 'lucide-react';
+import { format, parse } from 'date-fns';
+import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { createBulkTimeEntries } from '@/app/lib/actions/time-entries';
+import { toast } from 'sonner';
+
+interface Project {
+  id: number;
+  name: string;
+  identifier: string;
+}
+
+interface Activity {
+  id: number;
+  name: string;
+  is_default: boolean;
+}
+
+interface TimeEntry {
+  id: string;
+  projectId: number;
+  activityId: number;
+  date: string;
+  hours: number;
+  comments: string;
+}
+
+interface EnhancedTimeEntryFormProps {
+  selectedProject: Project;
+  activities: Activity[];
+  selectedDate: Date;
+  onDateSelect: (date: Date) => void;
+  onClose?: () => void;
+}
+
+export function EnhancedTimeEntryForm({ 
+  selectedProject, 
+  activities, 
+  selectedDate, 
+  onDateSelect,
+  onClose
+}: EnhancedTimeEntryFormProps) {
+  // Initialize with one default entry using the selected project
+  const [entries, setEntries] = useState<TimeEntry[]>([{
+    id: Date.now().toString(),
+    projectId: selectedProject.id,
+    activityId: activities[0]?.id || 0,
+    date: format(selectedDate, 'yyyy-MM-dd'),
+    hours: 8,
+    comments: '',
+  }]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    onConfirm: () => void;
+  } | null>(null);
+  const dateButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Focus on the date field when the form opens
+  useEffect(() => {
+    if (dateButtonRef.current) {
+      // Small delay to ensure the button is rendered
+      setTimeout(() => {
+        dateButtonRef.current?.focus();
+      }, 100);
+    }
+  }, []);
+
+  const addEntry = () => {
+    const newEntry: TimeEntry = {
+      id: Date.now().toString(),
+      projectId: selectedProject.id,
+      activityId: activities[0]?.id || 0,
+      date: format(selectedDate, 'yyyy-MM-dd'),
+      hours: 8,
+      comments: '',
+    };
+    setEntries([...entries, newEntry]);
+  };
+
+  const updateEntry = (id: string, field: keyof TimeEntry, value: string | number) => {
+    setEntries(entries.map(entry => 
+      entry.id === id ? { ...entry, [field]: value } : entry
+    ));
+  };
+
+  const removeEntry = (id: string) => {
+    setEntries(entries.filter(entry => entry.id !== id));
+  };
+
+  const showConfirmDialog = (title: string, description: string): Promise<void> => {
+    return new Promise<void>((resolve) => {
+      setConfirmDialog({
+        open: true,
+        title,
+        description,
+        onConfirm: () => {
+          setConfirmDialog(null);
+          resolve();
+        },
+      });
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (entries.length === 0) {
+      toast.error('Please add at least one time entry');
+      return;
+    }
+
+    // Validation: Check for missing comments
+    const missingComments = entries.filter(entry => !entry.comments || entry.comments.trim() === '');
+    if (missingComments.length > 0) {
+      toast.error('Comments are required for all time entries');
+      return;
+    }
+
+    // Validation: Check for 0 hours entries
+    const zeroHourEntries = entries.filter(entry => entry.hours === 0);
+    if (zeroHourEntries.length > 0) {
+      const zeroHourDates = zeroHourEntries.map(e => format(parse(e.date, 'yyyy-MM-dd', new Date()), 'MMM d')).join(', ');
+      try {
+        await showConfirmDialog(
+          "Zero Hours Detected",
+          `You have entries with 0 hours on (${zeroHourDates}). Are you sure you want to continue?`
+        );
+      } catch {
+        return; // User cancelled
+      }
+    }
+
+    // Validation: Check for weekend entries
+    const weekendEntries = entries.filter(entry => {
+      const date = parse(entry.date, 'yyyy-MM-dd', new Date());
+      const day = date.getDay();
+      return day === 0 || day === 6;
+    });
+
+    if (weekendEntries.length > 0) {
+      const weekendDates = weekendEntries.map(e => format(parse(e.date, 'yyyy-MM-dd', new Date()), 'MMM d')).join(', ');
+      try {
+        await showConfirmDialog(
+          "Weekend Entry Detected",
+          `You have entries on weekend days (${weekendDates}). Do you want to continue?`
+        );
+      } catch {
+        return; // User cancelled
+      }
+    }
+
+    // Validation: Check for entries over 8 hours
+    const overEightEntries = entries.filter(entry => entry.hours > 8);
+    if (overEightEntries.length > 0) {
+      const overEightDates = overEightEntries.map(e => format(parse(e.date, 'yyyy-MM-dd', new Date()), 'MMM d')).join(', ');
+      try {
+        await showConfirmDialog(
+          "Hours Exceed 8 Per Day",
+          `The following days have more than 8 hours: ${overEightDates}. Is this correct?`
+        );
+      } catch {
+        return; // User cancelled
+      }
+    }
+
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append('entries', JSON.stringify(entries));
+      
+      await createBulkTimeEntries(formData);
+      
+      toast.success('Time entries created successfully!');
+      setEntries([{
+        id: Date.now().toString(),
+        projectId: selectedProject.id,
+        activityId: activities[0]?.id || 0,
+        date: format(selectedDate, 'yyyy-MM-dd'),
+        hours: 8,
+        comments: '',
+      }]);
+      
+      if (onClose) {
+        onClose();
+      }
+    } catch (error) {
+      console.error('Error creating time entries:', error);
+      toast.error('Failed to create time entries. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const totalHours = entries.reduce((sum, entry) => sum + entry.hours, 0);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Time Entry Form</CardTitle>
+            <CardDescription>
+              Add your time entries for the selected date
+            </CardDescription>
+          </div>
+          {onClose && (
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Date Selection */}
+        <div className="space-y-2">
+          <Label>Date</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                ref={dateButtonRef}
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal",
+                  !selectedDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(date) => date && onDateSelect(date)}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {/* Entries List */}
+        <div className="space-y-3">
+          {entries.map((entry) => (
+            <div key={entry.id} className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <Badge variant="outline">Entry {entries.indexOf(entry) + 1}</Badge>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeEntry(entry.id)}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Project Info (Read-only) */}
+              <div className="space-y-2 mb-3">
+                <Label>Project</Label>
+                <div className="w-full px-3 py-2 bg-muted rounded-md text-sm">
+                  {selectedProject.name}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor={`activity-${entry.id}`}>Activity</Label>
+                  <Select
+                    value={entry.activityId.toString()}
+                    onValueChange={(value) => updateEntry(entry.id, 'activityId', parseInt(value))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activities.map((activity) => (
+                        <SelectItem key={activity.id} value={activity.id.toString()}>
+                          {activity.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor={`hours-${entry.id}`}>Hours</Label>
+                <Input
+                  id={`hours-${entry.id}`}
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={entry.hours}
+                  onChange={(e) => updateEntry(entry.id, 'hours', parseFloat(e.target.value) || 0)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor={`comments-${entry.id}`}>
+                  Comments <span className="text-destructive">*</span>
+                </Label>
+                <Textarea
+                  id={`comments-${entry.id}`}
+                  placeholder="Enter comments (required)..."
+                  value={entry.comments}
+                  onChange={(e) => updateEntry(entry.id, 'comments', e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Add Entry Button */}
+        <Button
+          variant="outline"
+          onClick={addEntry}
+          className="w-full"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Add Entry
+        </Button>
+
+        {/* Summary */}
+        {entries.length > 0 && (
+          <div className="bg-muted p-3 rounded-lg">
+            <div className="flex justify-between items-center">
+              <span className="font-medium">Total Hours:</span>
+              <Badge variant={totalHours >= 8 ? "default" : "secondary"}>
+                {totalHours} hours
+              </Badge>
+            </div>
+            {totalHours < 8 && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Warning: Less than 8 hours for the day
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Submit Button */}
+        <Button
+          onClick={handleSubmit}
+          disabled={entries.length === 0 || isSubmitting}
+          className="w-full"
+        >
+          {isSubmitting ? 'Creating...' : 'Create Time Entries'}
+        </Button>
+      </CardContent>
+
+      {/* Confirmation Dialog */}
+      {confirmDialog && (
+        <AlertDialog open={confirmDialog.open} onOpenChange={() => setConfirmDialog(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {confirmDialog.description}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setConfirmDialog(null)}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDialog.onConfirm}>
+                Continue
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </Card>
+  );
+}
