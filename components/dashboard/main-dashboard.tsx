@@ -109,6 +109,8 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
           setAllTimeEntries(entries);
         } catch (error) {
           console.error('Error loading time entries:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Failed to load time entries';
+          toast.error(errorMessage);
           setAllTimeEntries([]);
         } finally {
           setLoadingTimeEntries(false);

@@ -41,7 +41,7 @@ export class RedmineService {
           );
         }
         if (response.status === 422) {
-          let errorData = {};
+          let errorData: { errors?: string[]; message?: string } = {};
           try {
             errorData = JSON.parse(responseText);
           } catch {

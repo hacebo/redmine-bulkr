@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { getCurrentUser } from '@/lib/currentUser';
+import { getServerUser } from '@/lib/services/auth';
 import { getProjects, getActivities } from '@/app/lib/actions/projects';
 import { getMonthlyTimeEntries } from '@/app/lib/actions/time-entries';
 import { BulkEntryClient } from '@/components/time-entry/bulk-entry-client';
@@ -15,7 +15,7 @@ interface BulkEntryPageProps {
 }
 
 export default async function BulkEntryPage({ searchParams }: BulkEntryPageProps) {
-  const user = await getCurrentUser();
+  const user = await getServerUser();
   
   if (!user) {
     redirect('/login');

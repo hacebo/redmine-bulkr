@@ -1,201 +1,118 @@
-# Bulk Redmine
+# BulkRedmine
 
-A secure web application for bulk time entry management in Redmine using Next.js, TypeScript, and ShadCN UI with encrypted credential storage.
+A modern time tracking application for Redmine that enables bulk time entry management with a beautiful, mobile-first interface.
 
-## Features
+## 🚀 Features
 
-- **Secure Authentication**: Supabase Auth with magic links and encrypted Redmine credentials (AES-256-GCM)
-- **Bulk Time Entries**: Create multiple time entries for a week at once
-- **Weekly Summary**: View and track your time entries by week
-- **Redmine Sync**: Sync time entries directly to your Redmine instance
+- **Bulk Time Entries**: Create multiple time entries for an entire week at once
+- **Weekly Overview**: Visual weekly calendar with time tracking summary
+- **Redmine Integration**: Direct sync with your Redmine instance
+- **Secure Authentication**: Appwrite-powered authentication with magic links
+- **Mobile-First Design**: Responsive design optimized for mobile devices
 - **Dark Theme**: Beautiful dark theme by default
-- **Database**: PostgreSQL with Drizzle ORM for credential management
-- **Sidebar Navigation**: Modern sidebar with user menu and settings
+- **Real-time Validation**: Instant feedback on time entries and connections
 
-## Tech Stack
+## 🛠️ Tech Stack
 
 - **Framework**: Next.js 15 with App Router (React 19)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS with ShadCN UI
-- **Authentication**: Supabase Auth with magic links
-- **Database**: PostgreSQL with Drizzle ORM
-- **Encryption**: AES-256-GCM for API key storage
+- **Authentication**: Appwrite
+- **Database**: Appwrite Databases
+- **Encryption**: AES-256-GCM for secure credential storage
 - **API Integration**: Redmine REST API
 
-## Getting Started
+## 🏃‍♂️ Quick Start
 
 ### Prerequisites
 
-- Node.js 18+ 
-- pnpm (recommended package manager)
-- PostgreSQL database (local Docker or Supabase)
+- Node.js 18+
+- pnpm (recommended)
+- Appwrite instance (local or cloud)
+- Redmine instance with API access
 
-### Quick Setup
+### Installation
 
-For detailed setup instructions, see [docs/SETUP.md](docs/SETUP.md)
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd bulkredmine
+   ```
 
-### Quick Start
-
-1. Clone the repository
-
-2. Install dependencies:
-   ```powershell
+2. **Install dependencies**
+   ```bash
    pnpm install
    ```
 
-3. Set up environment variables:
-   ```powershell
-   Copy-Item .env.example .env.local
-   ```
-   
-   Edit `.env.local` with your values (see SETUP.md for details)
-
-4. Generate and run database migrations:
-   ```powershell
-   pnpm db:generate
-   pnpm db:push
+3. **Set up environment variables**
+   ```bash
+   cp .env.example .env.local
+   # Edit .env.local with your configuration
    ```
 
-5. Start the development server:
-   ```powershell
+4. **Start development server**
+   ```bash
    pnpm dev
    ```
 
-6. Open [http://localhost:3000](http://localhost:3000) in your browser
+5. **Open your browser**
+   ```
+   http://localhost:3000
+   ```
 
-## Usage
+## 📱 Usage
 
-### First Time Login
+1. **Sign up/Login**: Use magic link authentication (no passwords needed)
+2. **Configure Redmine**: Add your Redmine URL and API key in settings
+3. **Select Project**: Choose a project from your Redmine instance
+4. **Bulk Entry**: Create time entries for multiple days at once
+5. **Track Progress**: View your weekly time tracking summary
 
-1. **Login Page**: Navigate to the login page
-2. **Magic Link**: Enter your work email and click "Send Magic Link"
-3. **Email**: Check your email (or Inbucket at http://127.0.0.1:54324 for local dev)
-4. **Authenticate**: Click the magic link to sign in
-5. **Redmine Setup**: On first login, you'll be redirected to configure Redmine:
-   - Enter your Redmine instance URL
-   - Enter your Redmine API key
-6. **Validation**: The app validates your API key against Redmine
-7. **Secure Storage**: Your credentials are encrypted and stored securely
-8. **Ready**: Redirected to time tracking dashboard
+## 🔧 Configuration
 
-### Creating Time Entries
+### Environment Variables
 
-1. **Navigate to Dashboard**: After login, you'll see the time entry form
-2. **Add Entries**: 
-   - Select project and activity
-   - Choose the date
-   - Enter hours worked
-   - Add optional comments
-3. **Bulk Add**: Create multiple entries for the week
-4. **Submit**: All entries are saved directly to Redmine
-5. **Real-time**: No sync needed, everything is instant
+Create a `.env.local` file with the following variables:
 
-### Weekly Summary
+```env
+# Appwrite Configuration
+NEXT_PUBLIC_APPWRITE_ENDPOINT=https://your-appwrite-endpoint
+NEXT_PUBLIC_APPWRITE_PROJECT_ID=your-project-id
+APPWRITE_DATABASE_ID=your-database-id
+APPWRITE_COLLECTION_ID=your-collection-id
 
-- View your time entries for the current week
-- Navigate between weeks using the arrow buttons
-- See total hours and breakdown by project/activity
-- All data fetched in real-time from Redmine
+# Appwrite Admin (Server-side)
+APPWRITE_API_KEY=your-admin-api-key
 
-## Data & Security
+# Crypto (Generate with: node scripts/generate-keys.js)
+CRYPTO_KEY_BASE64=your-encryption-key
 
-### Credential Storage
-
-- **Encrypted**: API keys encrypted with AES-256-GCM
-- **Database**: PostgreSQL stores encrypted credentials
-- **Server-Only**: Decryption happens only on server
-- **Never Exposed**: API keys never reach the client
-
-### Time Entry Data
-
-- **No Local Storage**: Time entries stored only in Redmine
-- **Real-time Sync**: All operations direct to Redmine API
-- **Caching**: Smart caching for projects and activities
-
-## API Integration
-
-The app integrates with Redmine using the REST API:
-
-- **Authentication**: Uses API key authentication
-- **Time Entries**: Creates time entries via `/time_entries.json`
-- **Projects**: Fetches available projects
-- **Activities**: Fetches available activities
-
-## Development
-
-### Available Scripts
-
-- `pnpm dev` - Start development server
-- `pnpm build` - Build for production
-- `pnpm start` - Start production server
-- `pnpm lint` - Run ESLint
-- `pnpm db:generate` - Generate database migrations
-- `pnpm db:push` - Push schema changes to database
-- `pnpm db:migrate` - Run database migrations
-
-### Project Structure
-
-```
-app/
-  (auth)/                     # Public routes
-    login/                    # Magic link login
-  (protected)/                # Protected app routes
-    time-tracking/            # Time tracking dashboard
-    bulk-entry/               # Bulk entry page
-    settings/                 # Settings pages
-  lib/
-    actions/                  # Server actions
-    services/                 # Service layer
-lib/
-  supabase/                   # Supabase clients
-  crypto.ts                   # AES-256-GCM encryption
-  db.ts                       # Database client
-  schema.ts                   # Database schema
-components/
-  app-sidebar.tsx             # Navigation sidebar
-  dashboard/                  # Dashboard components
-  time-entry/                 # Time entry components
-  ui/                         # ShadCN UI components
-docs/                         # Documentation
+# App URL (for magic links)
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-For detailed architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+## 📚 Documentation
 
-## Security
+For detailed setup and configuration instructions, see the [docs](./docs/) folder:
 
-- **AES-256-GCM Encryption**: API keys encrypted at rest
-- **Magic Link Authentication**: Passwordless login with Supabase
-- **Server-Side Decryption**: Credentials only decrypted on server
-- **HTTP-Only Cookies**: Session tokens not accessible to JavaScript
-- **Middleware Protection**: Protected routes with Supabase middleware
-- **Environment Variables**: Sensitive data in environment variables
-- **No Client Exposure**: API keys never sent to client
-- **Two-Step Security**: Separate auth and credential configuration
+- [Appwrite Setup](./docs/APPWRITE_SETUP.md) - Complete Appwrite configuration guide
 
-## Documentation
-
-- **[Setup Guide](docs/SETUP.md)** - Detailed installation and configuration
-- **[Architecture](docs/ARCHITECTURE.md)** - System design and data flow
-- **[Sequence Diagrams](docs/SEQUENCE_DIAGRAMS.md)** - Visual flow of data with real examples
-- **[API Reference](docs/API.md)** - Server actions and types
-- **[Security](docs/SECURITY.md)** - Security features and best practices
-- **[Deployment](docs/DEPLOYMENT.md)** - Production deployment guide
-- **[Git & Version Control](docs/GIT.md)** - What to commit and why
-
-## Deployment
-
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment instructions.
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-Please ensure compliance with your organization's policies when using with work-related Redmine instances.
+## 🙏 Acknowledgments
+
+- [Redmine](https://www.redmine.org/) - Project management tool
+- [Appwrite](https://appwrite.io/) - Backend-as-a-Service
+- [Next.js](https://nextjs.org/) - React framework
+- [ShadCN UI](https://ui.shadcn.com/) - UI component library
+- [Tailwind CSS](https://tailwindcss.com/) - CSS framework

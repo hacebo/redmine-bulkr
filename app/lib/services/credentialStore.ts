@@ -1,23 +1,36 @@
-import { db } from "@/lib/db";
-import { redmineCredentials } from "@/lib/schema";
-import { eq } from "drizzle-orm";
+'use server';
+
+import { createSessionClient, APPWRITE_DATABASE_ID, REDMINE_CREDENTIALS_COLLECTION_ID } from '@/lib/appwrite';
+import { ID, Query } from 'appwrite';
 
 export async function getEncryptedRedmineCredential(userId: string) {
   try {
-    const rows = await db
-      .select()
-      .from(redmineCredentials)
-      .where(eq(redmineCredentials.userId, userId))
-      .limit(1);
+    const { databases } = await createSessionClient();
     
-    const cred = rows[0];
-    if (!cred) {
+    let response;
+    try {
+      response = await databases.listDocuments(
+        APPWRITE_DATABASE_ID,
+        REDMINE_CREDENTIALS_COLLECTION_ID,
+        [Query.equal("userId", userId)]
+      );
+    } catch (error: any) {
+      // If user has no credentials yet, return null instead of throwing
+      if (error.code === 401 || error.code === 404) {
+        return null;
+      }
+      throw error;
+    }
+    
+    if (response.documents.length === 0) {
       return null;
     }
     
+    const cred = response.documents[0];
+    
     return {
       baseUrl: cred.baseUrl.replace(/\/$/, ""),
-      redmineUserId: parseInt(cred.redmineUserId),
+      redmineUserId: parseInt(cred.redmineUserId || '0'),
       encB64: cred.apiKeyEnc,
       ivB64: cred.iv,
       tagB64: cred.tag,
@@ -39,34 +52,44 @@ export async function upsertEncryptedRedmineCredential(args: {
   const cleanUrl = args.baseUrl.replace(/\/$/, "");
   
   try {
-    const existing = await db
-      .select()
-      .from(redmineCredentials)
-      .where(eq(redmineCredentials.userId, args.userId))
-      .limit(1);
+    const { databases } = await createSessionClient();
+    
+    // Check if credentials already exist
+    const existing = await databases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      REDMINE_CREDENTIALS_COLLECTION_ID,
+      [Query.equal("userId", args.userId)]
+    );
 
-    if (existing.length > 0) {
-      await db
-        .update(redmineCredentials)
-        .set({
+    if (existing.documents.length > 0) {
+      // Update existing credentials
+      await databases.updateDocument(
+        APPWRITE_DATABASE_ID,
+        REDMINE_CREDENTIALS_COLLECTION_ID,
+        existing.documents[0].$id,
+        {
           baseUrl: cleanUrl,
           redmineUserId: args.redmineUserId.toString(),
           apiKeyEnc: args.encB64,
           iv: args.ivB64,
           tag: args.tagB64,
-          updatedAt: new Date(),
-        })
-        .where(eq(redmineCredentials.userId, args.userId))
-        .returning();
+        }
+      );
     } else {
-      await db.insert(redmineCredentials).values({
-        userId: args.userId,
-        baseUrl: cleanUrl,
-        redmineUserId: args.redmineUserId.toString(),
-        apiKeyEnc: args.encB64,
-        iv: args.ivB64,
-        tag: args.tagB64,
-      }).returning();
+      // Create new credentials
+      await databases.createDocument(
+        APPWRITE_DATABASE_ID,
+        REDMINE_CREDENTIALS_COLLECTION_ID,
+        ID.unique(),
+        {
+          userId: args.userId,
+          baseUrl: cleanUrl,
+          redmineUserId: args.redmineUserId.toString(),
+          apiKeyEnc: args.encB64,
+          iv: args.ivB64,
+          tag: args.tagB64,
+        }
+      );
     }
   } catch (error) {
     console.error('[CredentialStore] Error upserting credentials:', error);

@@ -1,107 +1,97 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
-import { getCurrentUser } from "@/lib/currentUser";
-import { db } from "@/lib/db";
-import { redmineCredentials } from "@/lib/schema";
-import { eq } from "drizzle-orm";
-import { encryptToGcm, decryptFromGcm } from "@/lib/crypto";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { saveRedmineCredentials } from "@/lib/services/redmine-credentials";
+import { getServerUser } from "@/lib/services/auth";
 
 function normalizeUrl(url: string) {
   return url.replace(/\/$/, "");
 }
 
 export async function saveRedmineCredentialAction(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) {
-    throw new Error("Unauthorized");
+  try {
+    const user = await getServerUser();
+    if (!user) {
+      return {
+        success: false,
+        error: "User not authenticated"
+      };
+    }
+
+    const baseUrl = normalizeUrl(String(formData.get("baseUrl") || ""));
+    const apiKey = String(formData.get("apiKey") || "");
+
+    if (!baseUrl || !apiKey) {
+      return {
+        success: false,
+        error: "Missing Redmine URL or API key"
+      };
+    }
+
+    const result = await saveRedmineCredentials({ baseUrl, apiKey });
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || "Failed to save credentials"
+      };
+    }
+
+    // Invalidate all cached data for this user since credentials changed
+    revalidateTag(`projects:${user.$id}`);
+    revalidateTag(`activities:${user.$id}`);
+    revalidateTag(`time-entries:${user.$id}`);
+    revalidatePath("/time-tracking");
+    
+    return {
+      success: true,
+      message: "Redmine credentials saved successfully!",
+      redirect: "/time-tracking"
+    };
+  } catch (error: any) {
+    console.error("Error saving Redmine credentials:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to save credentials"
+    };
   }
-
-  const baseUrl = normalizeUrl(String(formData.get("baseUrl") || ""));
-  const apiKey = String(formData.get("apiKey") || "");
-
-  if (!baseUrl || !apiKey) {
-    throw new Error("Missing Redmine URL or API key");
-  }
-
-  const res = await fetch(`${baseUrl}/my/account.json`, {
-    headers: { "X-Redmine-API-Key": apiKey },
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    throw new Error("Invalid Redmine API key or URL");
-  }
-
-  const data = await res.json();
-  const redmineUser = data?.user;
-
-  if (!redmineUser?.id) {
-    throw new Error("Unable to fetch Redmine user information");
-  }
-
-  const { encB64, ivB64, tagB64 } = encryptToGcm(apiKey);
-
-  const existing = await db
-    .select()
-    .from(redmineCredentials)
-    .where(eq(redmineCredentials.userId, user.id))
-    .limit(1);
-
-  if (existing.length > 0) {
-    await db
-      .update(redmineCredentials)
-      .set({
-        baseUrl,
-        redmineUserId: redmineUser.id.toString(),
-        apiKeyEnc: encB64,
-        iv: ivB64,
-        tag: tagB64,
-        updatedAt: new Date(),
-      })
-      .where(eq(redmineCredentials.userId, user.id));
-  } else {
-    await db.insert(redmineCredentials).values({
-      userId: user.id,
-      baseUrl,
-      redmineUserId: redmineUser.id.toString(),
-      apiKeyEnc: encB64,
-      iv: ivB64,
-      tag: tagB64,
-    });
-  }
-
-  revalidatePath("/time-tracking");
-  redirect("/time-tracking");
 }
 
 export async function testRedmineConnectionAction() {
-  const user = await getCurrentUser();
-  if (!user) {
-    throw new Error("Unauthorized");
+  try {
+    const { getDecryptedRedmineCredentials } = await import("@/lib/services/redmine-credentials");
+    
+    const credentials = await getDecryptedRedmineCredentials();
+    if (!credentials) {
+      return { 
+        success: false, 
+        error: "No Redmine credentials found. Please save your credentials first." 
+      };
+    }
+
+    const res = await fetch(`${credentials.baseUrl}/my/account.json`, {
+      headers: { "X-Redmine-API-Key": credentials.apiKey },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      return { 
+        success: false, 
+        error: `Connection test failed (${res.status}): ${res.statusText}. Please check your credentials.` 
+      };
+    }
+
+    const data = await res.json();
+    return { 
+      success: true, 
+      message: `Connection successful! Connected as ${data.user?.firstname || data.user?.login || 'user'}` 
+    };
+  } catch (error: any) {
+    console.error('Test connection error:', error);
+    return { 
+      success: false, 
+      error: error.message || "Connection test failed. Please check your credentials." 
+    };
   }
-
-  const rows = await db
-    .select()
-    .from(redmineCredentials)
-    .where(eq(redmineCredentials.userId, user.id))
-    .limit(1);
-
-  const cred = rows[0];
-  if (!cred) {
-    throw new Error("No Redmine credentials found. Please save your credentials first.");
-  }
-
-  const apiKey = decryptFromGcm(cred.apiKeyEnc, cred.iv, cred.tag);
-  const res = await fetch(`${cred.baseUrl}/my/account.json`, {
-    headers: { "X-Redmine-API-Key": apiKey },
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    throw new Error("Connection test failed. Please check your credentials.");
-  }
-
-  return { ok: true, message: "Connection successful!" };
 }

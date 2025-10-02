@@ -1,45 +1,57 @@
-// Wrapper around Next.js unstable_cache for consistent caching interface
+// Wrapper around Next.js unstable_cache for user-scoped caching
 // This abstraction allows us to switch implementations (Redis, etc.) in the future
 
 import { unstable_cache } from 'next/cache';
 
-interface CacheOptions {
-  revalidate?: number; // Time in seconds
-  tags?: string[]; // Cache tags for selective invalidation
+export interface UserContext {
+  userId: string;
+  baseUrl: string;
 }
 
 /**
- * Creates a cached version of an async function using Next.js built-in cache
- * @param fn - The async function to cache
- * @param keys - Cache key parts (will be combined into a single key)
- * @param options - Cache options (revalidate time and tags)
+ * Creates a user-scoped cached function
+ * Each user gets their own isolated cache based on userId and baseUrl
+ * 
+ * @param fn - The raw fetch function (receives no params, should get credentials internally)
+ * @param keyPrefix - Prefix for the cache key (e.g., 'projects', 'activities')
+ * @param ctx - User context for scoping
+ * @param options - Cache options
  * @returns A cached version of the function
  */
-export function cachedFn<T>(
+export function createUserScopedCache<T>(
   fn: () => Promise<T>,
-  keys: string[],
-  options: CacheOptions = {}
+  keyPrefix: string,
+  ctx: UserContext,
+  options: {
+    revalidate?: number;
+    tagPrefix: string;
+  }
 ): () => Promise<T> {
-  const { revalidate = 300, tags = [] } = options; // Default 5 minutes
+  const { revalidate = 300, tagPrefix } = options;
   
-  return unstable_cache(fn, keys, {
-    revalidate,
-    tags,
-  });
+  // Scope cache by user and baseUrl so users don't see each other's data
+  return unstable_cache(
+    fn,
+    [`${keyPrefix}:${ctx.userId}:${ctx.baseUrl}`],
+    {
+      revalidate,
+      tags: [`${tagPrefix}:${ctx.userId}`],
+    }
+  );
 }
 
 // Cache configuration constants
 export const CACHE_CONFIG = {
   PROJECTS: {
-    revalidate: 600, // 10 minutes
-    tags: ['projects'],
+    revalidate: 60 * 10, // 10 minutes
+    tagPrefix: 'projects',
   },
   ACTIVITIES: {
-    revalidate: 1800, // 30 minutes
-    tags: ['activities'],
+    revalidate: 60 * 60, // 1 hour (activities change rarely)
+    tagPrefix: 'activities',
   },
   TIME_ENTRIES: {
     revalidate: 60, // 1 minute
-    tags: ['time-entries'],
+    tagPrefix: 'time-entries',
   },
 } as const;

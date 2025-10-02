@@ -1,5 +1,4 @@
-import { getCurrentUser } from "@/lib/currentUser";
-import { deleteAccountAction } from "./actions";
+import { getServerUser } from "@/lib/services/auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,9 +13,10 @@ import {
   AlertTitle,
 } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
+import { ClearAccountDataForm } from "@/components/forms/delete-account-form";
 
 export default async function AccountSettingsPage() {
-  const user = await getCurrentUser();
+  const user = await getServerUser();
 
   if (!user) {
     return null;
@@ -37,21 +37,25 @@ export default async function AccountSettingsPage() {
             <span className="text-sm font-medium">{user.email}</span>
           </div>
           <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-muted-foreground">User ID:</span>
-            <span className="text-sm font-mono text-xs">{user.id}</span>
+            <span className="text-sm text-muted-foreground">Name:</span>
+            <span className="text-sm font-medium">{user.name || 'Not set'}</span>
           </div>
           <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-muted-foreground">Account Created:</span>
-            <span className="text-sm">{new Date(user.created_at || '').toLocaleDateString()}</span>
+            <span className="text-sm text-muted-foreground">User ID:</span>
+            <span className="text-sm font-mono text-xs">{user.$id}</span>
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <span className="text-sm text-muted-foreground">Email Verified:</span>
+            <span className="text-sm">{user.emailVerification ? 'Yes' : 'No'}</span>
           </div>
         </CardContent>
       </Card>
 
       <Card className="border-destructive">
         <CardHeader>
-          <CardTitle className="text-destructive">Danger Zone</CardTitle>
+          <CardTitle className="text-destructive">Data Management</CardTitle>
           <CardDescription>
-            Irreversible actions that affect your account
+            Clear your stored data and logout
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -59,14 +63,17 @@ export default async function AccountSettingsPage() {
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Warning</AlertTitle>
             <AlertDescription>
-              Deleting your account will permanently remove from BulkRedmine:
+              Clearing your account data will permanently remove from BulkRedmine:
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>Your local account information</li>
                 <li>Your encrypted Redmine credentials</li>
                 <li>All stored configuration</li>
+                <li>Log you out of all sessions</li>
               </ul>
               <p className="mt-2 font-semibold text-green-600 dark:text-green-400">
                 Your Redmine data is safe: All time entries and your Redmine account will remain unchanged.
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Note: Your Appwrite account will remain but without any stored data.
               </p>
               <p className="mt-1 font-semibold">
                 This action cannot be undone.
@@ -74,11 +81,7 @@ export default async function AccountSettingsPage() {
             </AlertDescription>
           </Alert>
 
-          <form action={deleteAccountAction}>
-            <Button type="submit" variant="destructive" className="w-full">
-              Delete Account and All Data
-            </Button>
-          </form>
+          <ClearAccountDataForm />
         </CardContent>
       </Card>
     </div>

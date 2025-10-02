@@ -32,8 +32,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { usePathname, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { logoutAction } from "@/lib/actions/logout";
 
 const navItems = [
   {
@@ -54,10 +54,8 @@ export function AppSidebar({ user }: { user: { email: string; name?: string | nu
 
   async function handleLogout() {
     try {
-      const supabase = createClient();
-      await supabase.auth.signOut();
-      router.push("/login");
-      router.refresh();
+      await logoutAction();
+      toast.success("Signed out successfully");
     } catch (error) {
       console.error("Logout error:", error);
       toast.error("Error signing out");

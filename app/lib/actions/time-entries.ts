@@ -1,7 +1,7 @@
 'use server';
 
-import { getCurrentUser } from '@/lib/currentUser';
-import { getRedmineClientForUser } from '../services/redmineClient';
+import { getServerUser } from '@/lib/services/auth';
+import { getRedmineClientForUser, getRedmineUserId } from '../services/redmineClient';
 import { z } from 'zod';
 import { TimeEntry, WeeklyTimeData, RedmineTimeEntry, RedmineApiError } from '../types';
 
@@ -16,7 +16,7 @@ const bulkTimeEntrySchema = z.object({
 });
 
 export async function createBulkTimeEntries(formData: FormData) {
-  const user = await getCurrentUser();
+  const user = await getServerUser();
   if (!user) {
     throw new Error('User not authenticated');
   }
@@ -38,7 +38,7 @@ export async function createBulkTimeEntries(formData: FormData) {
 
   try {
     // Create time entries directly in Redmine
-    const { client: redmineService } = await getRedmineClientForUser(user.id);
+    const redmineService = await getRedmineClientForUser();
 
     const results = [];
     for (const entry of validatedData.entries) {
@@ -55,6 +55,10 @@ export async function createBulkTimeEntries(formData: FormData) {
       const result = await redmineService.createTimeEntry(redmineEntry);
       results.push(result);
     }
+
+    // Invalidate time entries cache for this user
+    const { revalidateTag } = await import('next/cache');
+    revalidateTag(`time-entries:${user.$id}`);
 
     return { success: true, timeEntries: results };
   } catch (error) {
@@ -78,14 +82,15 @@ export async function createBulkTimeEntries(formData: FormData) {
 }
 
 export async function getWeeklyTimeEntries(weekStart: string): Promise<WeeklyTimeData> {
-  const user = await getCurrentUser();
+  const user = await getServerUser();
   if (!user) {
     throw new Error('User not authenticated');
   }
 
   try {
     // Get time entries from Redmine
-    const { client: redmineService, redmineUserId } = await getRedmineClientForUser(user.id);
+    const redmineService = await getRedmineClientForUser();
+    const redmineUserId = await getRedmineUserId();
 
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
@@ -126,7 +131,7 @@ export async function getWeeklyTimeEntries(weekStart: string): Promise<WeeklyTim
     
     if (error instanceof RedmineApiError) {
       if (error.code === 'UNAUTHORIZED') {
-        throw new Error('Your Redmine API key is invalid or expired. Please log in again.');
+        throw new Error('Your Redmine API key is invalid or expired. Please update your credentials in Settings → Redmine.');
       }
       if (error.code === 'NETWORK_ERROR') {
         throw new Error('Unable to connect to Redmine. Please check your internet connection and try again.');
@@ -134,19 +139,27 @@ export async function getWeeklyTimeEntries(weekStart: string): Promise<WeeklyTim
       throw new Error(`Redmine error: ${error.message}`);
     }
     
+    // Pass through helpful error messages from getRedmineUserId
+    if (error instanceof Error) {
+      throw error;
+    }
+    
     throw new Error('Failed to fetch time entries. Please try again.');
   }
 }
 
 export async function getMonthlyTimeEntries(monthStart: string, monthEnd: string): Promise<TimeEntry[]> {
-  const user = await getCurrentUser();
+  const user = await getServerUser();
   if (!user) {
     throw new Error('User not authenticated');
   }
 
   try {
     // Get time entries from Redmine for the entire month
-    const { client: redmineService, redmineUserId } = await getRedmineClientForUser(user.id);
+    const redmineService = await getRedmineClientForUser();
+    const redmineUserId = await getRedmineUserId();
+
+    console.log('[getMonthlyTimeEntries] Fetching entries:', { redmineUserId, monthStart, monthEnd });
 
     const data = await redmineService.getTimeEntries(redmineUserId, monthStart, monthEnd, 500);
     
@@ -164,11 +177,15 @@ export async function getMonthlyTimeEntries(monthStart: string, monthEnd: string
 
     return entries;
   } catch (error) {
-    console.error('Error fetching monthly time entries:', error);
+    console.error('[getMonthlyTimeEntries] Error details:', {
+      error,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     
     if (error instanceof RedmineApiError) {
       if (error.code === 'UNAUTHORIZED') {
-        throw new Error('Your Redmine API key is invalid or expired. Please log in again.');
+        throw new Error('Your Redmine API key is invalid or expired. Please update your credentials in Settings → Redmine.');
       }
       if (error.code === 'NETWORK_ERROR') {
         throw new Error('Unable to connect to Redmine. Please check your internet connection and try again.');
@@ -176,12 +193,17 @@ export async function getMonthlyTimeEntries(monthStart: string, monthEnd: string
       throw new Error(`Redmine error: ${error.message}`);
     }
     
+    // Pass through helpful error messages from getRedmineUserId
+    if (error instanceof Error) {
+      throw error;
+    }
+    
     throw new Error('Failed to fetch time entries. Please try again.');
   }
 }
 
 export async function syncToRedmine() {
-  const user = await getCurrentUser();
+  const user = await getServerUser();
   if (!user) {
     throw new Error('User not authenticated');
   }

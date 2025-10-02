@@ -1,11 +1,10 @@
-import { getCurrentUser } from '@/lib/currentUser';
+import { getServerUser } from '@/lib/services/auth';
 import { redirect } from 'next/navigation';
-import { DashboardServer } from '@/components/dashboard/dashboard-server';
+import { MainDashboard } from '@/components/dashboard/main-dashboard';
 import { Suspense } from 'react';
 import { DashboardLoadingSkeleton } from '@/components/shared/loading-skeletons';
-import { db } from '@/lib/db';
-import { redmineCredentials, users } from '@/lib/schema';
-import { eq } from 'drizzle-orm';
+import { getRedmineCredentials } from '@/lib/services/redmine-credentials';
+import { getProjects, getActivities } from '@/app/lib/actions/projects';
 
 interface TimeTrackingPageProps {
   searchParams: Promise<{
@@ -14,42 +13,37 @@ interface TimeTrackingPageProps {
 }
 
 export default async function TimeTrackingPage({ searchParams }: TimeTrackingPageProps) {
-  const user = await getCurrentUser();
+  const user = await getServerUser();
   
   if (!user) {
     redirect('/login');
   }
 
-  const existingUser = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, user.id))
-    .limit(1);
-
-  if (existingUser.length === 0) {
-    await db.insert(users).values({
-      id: user.id,
-      email: user.email!,
-      name: user.user_metadata?.full_name || null,
-    });
-  }
-
-  const credRows = await db
-    .select()
-    .from(redmineCredentials)
-    .where(eq(redmineCredentials.userId, user.id))
-    .limit(1);
-
-  if (credRows.length === 0) {
+  // Check if user has Redmine credentials configured
+  const credentials = await getRedmineCredentials();
+  if (!credentials) {
     redirect('/settings/redmine');
   }
 
   const params = await searchParams;
   const projectId = params.projectId ? parseInt(params.projectId) : undefined;
 
+  // Fetch data directly in the page (React 19 pattern)
+  const dataPromise = Promise.all([
+    getProjects(),
+    getActivities()
+  ]).then(([projects, activities]) => ({
+    projects,
+    activities
+  }));
+
   return (
     <Suspense fallback={<DashboardLoadingSkeleton />}>
-      <DashboardServer currentMonth={new Date()} initialProjectId={projectId} />
+      <MainDashboard 
+        dataPromise={dataPromise}
+        currentMonth={new Date()}
+        initialProjectId={projectId}
+      />
     </Suspense>
   );
 }

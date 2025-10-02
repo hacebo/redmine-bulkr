@@ -1,18 +1,32 @@
-import { getEncryptedRedmineCredential } from "./credentialStore";
-import { decryptFromGcm } from "@/lib/crypto";
+import { getDecryptedRedmineCredentials } from "@/lib/services/redmine-credentials";
 import { RedmineService } from "./redmine";
 
-export async function getRedmineClientForUser(userId: string): Promise<{ client: RedmineService; redmineUserId: number }> {
-  const cred = await getEncryptedRedmineCredential(userId);
-  if (!cred) {
-    throw new Error("No Redmine credentials found for user");
+/**
+ * Get Redmine HTTP client for the current authenticated user
+ */
+export async function getRedmineClientForUser(): Promise<RedmineService> {
+  const credentials = await getDecryptedRedmineCredentials();
+  if (!credentials) {
+    throw new Error("No Redmine credentials found. Please configure your Redmine settings.");
   }
 
-  const apiKey = decryptFromGcm(cred.encB64, cred.ivB64, cred.tagB64);
-  const client = new RedmineService(cred.baseUrl, apiKey);
+  return new RedmineService(credentials.baseUrl, credentials.apiKey);
+}
+
+/**
+ * Get Redmine user ID from stored credentials
+ * Use this when you need to filter queries by user (e.g., time entries)
+ */
+export async function getRedmineUserId(): Promise<number> {
+  const credentials = await getDecryptedRedmineCredentials();
   
-  return {
-    client,
-    redmineUserId: cred.redmineUserId
-  };
+  if (!credentials) {
+    throw new Error('No Redmine credentials found. Please configure your credentials in Settings → Redmine.');
+  }
+
+  if (!credentials.redmineUserId) {
+    throw new Error('Redmine user ID is missing. Please re-save your credentials in Settings → Redmine.');
+  }
+
+  return parseInt(credentials.redmineUserId);
 }
