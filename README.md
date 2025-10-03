@@ -1,4 +1,4 @@
-# BulkRedmine
+# Redmine-Bulkr
 
 A modern time tracking application for Redmine that enables bulk time entry management with a beautiful, mobile-first interface.
 
@@ -36,7 +36,7 @@ A modern time tracking application for Redmine that enables bulk time entry mana
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd bulkredmine
+   cd redmine-bulkr
    ```
 
 2. **Install dependencies**

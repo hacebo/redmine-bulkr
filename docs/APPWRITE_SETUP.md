@@ -1,6 +1,6 @@
 # Appwrite Setup Guide
 
-This guide explains how to set up Appwrite for the BulkRedmine application.
+This guide explains how to set up Appwrite for the Redmine-Bulkr application.
 
 ## Local Development Setup
 
@@ -21,13 +21,13 @@ This will start:
 ### 2. Configure Appwrite Project
 
 1. Open http://localhost in your browser
-2. Create a new project called "BulkRedmine"
+2. Create a new project called "Redmine-Bulkr"
 3. Note your Project ID from the Settings tab
 
 ### 3. Set Up Database
 
 1. Go to **Database** section
-2. Create a new database called "bulkredmine"
+2. Create a new database called "redmine-bulkr"
 3. Note the Database ID
 
 ### 4. Create Redmine Credentials Collection

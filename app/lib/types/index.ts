@@ -1,4 +1,4 @@
-// Core data types for BulkRedmine application
+// Core data types for Redmine-Bulkr application
 
 export interface User {
   id: string;

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the caching strategy implemented in the BulkRedmine application using Next.js `unstable_cache` with proper user-scoping and cache invalidation.
+This document describes the caching strategy implemented in the Redmine-Bulkr application using Next.js `unstable_cache` with proper user-scoping and cache invalidation.
 
 ## Architecture
 

@@ -63,7 +63,7 @@ export default async function AccountSettingsPage() {
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Warning</AlertTitle>
             <AlertDescription>
-              Clearing your account data will permanently remove from BulkRedmine:
+              Clearing your account data will permanently remove from Redmine-Bulkr:
               <ul className="list-disc list-inside mt-2 space-y-1">
                 <li>Your encrypted Redmine credentials</li>
                 <li>All stored configuration</li>

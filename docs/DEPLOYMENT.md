@@ -110,8 +110,8 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 
 2. **Build and Deploy**
    ```bash
-   docker build -t bulkredmine .
-   docker run -p 3000:3000 bulkredmine
+   docker build -t redmine-bulkr .
+   docker run -p 3000:3000 redmine-bulkr
    ```
 
 ### Option 4: Self-Hosted VPS
@@ -130,7 +130,7 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
    ```bash
    # Clone repository
    git clone <your-repo>
-   cd bulkredmine
+   cd redmine-bulkr
    
    # Install dependencies
    pnpm install
@@ -140,7 +140,7 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
    
    # Start with PM2
    npm install -g pm2
-   pm2 start "pnpm start" --name bulkredmine
+   pm2 start "pnpm start" --name redmine-bulkr
    ```
 
 3. **Nginx Configuration**

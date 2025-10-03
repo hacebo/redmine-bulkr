@@ -2,7 +2,7 @@
 
 import crypto from 'crypto';
 
-console.log('Generating encryption key for BulkRedmine...\n');
+console.log('Generating encryption key for Redmine-Bulkr...\n');
 
 const cryptoKey = crypto.randomBytes(32).toString('base64');
 

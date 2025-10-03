@@ -2,7 +2,7 @@
 
 ## Architecture Overview
 
-BulkRedmine uses a modern server-first architecture with Next.js 15 App Router and Appwrite backend services.
+Redmine-Bulkr uses a modern server-first architecture with Next.js 15 App Router and Appwrite backend services.
 
 ### Tech Stack Details
 
@@ -16,7 +16,7 @@ BulkRedmine uses a modern server-first architecture with Next.js 15 App Router a
 ## Project Structure
 
 ```
-bulkredmine/
+redmine-bulkr/
 ├── app/                          # Next.js App Router
 │   ├── (auth)/                   # Authentication routes
 │   ├── (protected)/              # Protected app routes
