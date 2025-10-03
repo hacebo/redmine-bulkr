@@ -74,7 +74,7 @@ export function LoginForm() {
           <TabsContent value="magic" className="space-y-4">
             <MagicLinkForm />
             <p className="text-xs text-muted-foreground text-center">
-              We'll send you a secure link to sign in without a password
+              We&apos;ll send you a secure link to sign in without a password
             </p>
           </TabsContent>
         </Tabs>

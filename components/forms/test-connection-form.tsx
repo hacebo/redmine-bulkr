@@ -19,8 +19,9 @@ export function TestConnectionForm() {
       } else {
         toast.error(result.error || 'Connection test failed');
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Connection test failed');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Connection test failed';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }

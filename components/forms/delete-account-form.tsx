@@ -37,8 +37,9 @@ export function ClearAccountDataForm() {
         toast.error(result.error || 'Failed to clear account data');
         setIsLoading(false);
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to clear account data');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to clear account data';
+      toast.error(errorMessage);
       setIsLoading(false);
     }
   }

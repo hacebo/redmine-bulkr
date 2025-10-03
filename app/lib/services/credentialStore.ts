@@ -14,9 +14,10 @@ export async function getEncryptedRedmineCredential(userId: string) {
         REDMINE_CREDENTIALS_COLLECTION_ID,
         [Query.equal("userId", userId)]
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If user has no credentials yet, return null instead of throwing
-      if (error.code === 401 || error.code === 404) {
+      if (error && typeof error === 'object' && 'code' in error && 
+          (error.code === 401 || error.code === 404)) {
         return null;
       }
       throw error;

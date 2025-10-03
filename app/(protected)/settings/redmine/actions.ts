@@ -1,6 +1,5 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { saveRedmineCredentials } from "@/lib/services/redmine-credentials";
 import { getServerUser } from "@/lib/services/auth";
@@ -49,11 +48,12 @@ export async function saveRedmineCredentialAction(formData: FormData) {
       message: "Redmine credentials saved successfully!",
       redirect: "/time-tracking"
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error saving Redmine credentials:", error);
+    const errorMessage = error instanceof Error ? error.message : "Failed to save credentials";
     return {
       success: false,
-      error: error.message || "Failed to save credentials"
+      error: errorMessage
     };
   }
 }
@@ -87,11 +87,12 @@ export async function testRedmineConnectionAction() {
       success: true, 
       message: `Connection successful! Connected as ${data.user?.firstname || data.user?.login || 'user'}` 
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Test connection error:', error);
+    const errorMessage = error instanceof Error ? error.message : "Connection test failed. Please check your credentials.";
     return { 
       success: false, 
-      error: error.message || "Connection test failed. Please check your credentials." 
+      error: errorMessage
     };
   }
 }

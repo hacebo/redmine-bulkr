@@ -8,7 +8,7 @@ export interface AuthUser {
   email: string;
   name: string;
   emailVerification: boolean;
-  prefs: Record<string, any>;
+  prefs: Record<string, unknown>;
 }
 
 export async function getServerUser(): Promise<AuthUser | null> {
@@ -23,10 +23,12 @@ export async function getServerUser(): Promise<AuthUser | null> {
       emailVerification: user.emailVerification,
       prefs: user.prefs,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Don't log expected "not logged in" errors (401 unauthorized)
     // These happen normally when users aren't authenticated
-    if (error?.code !== 401 && error?.type !== 'general_unauthorized_scope') {
+    if (error && typeof error === 'object' && 
+        'code' in error && error.code !== 401 && 
+        'type' in error && error.type !== 'general_unauthorized_scope') {
       console.error('Error getting server user:', error);
     }
     return null;
@@ -45,15 +47,16 @@ export async function loginWithEmail(
       return { success: false, error: 'Email and password are required' };
     }
     
-    const session = await account.createEmailPasswordSession(email, password);
+    await account.createEmailPasswordSession(email, password);
     const user = await account.get();
     
     return { success: true, user };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Login error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Login failed';
     return { 
       success: false, 
-      error: error.message || 'Login failed' 
+      error: errorMessage
     };
   }
 }
@@ -78,11 +81,12 @@ export async function registerWithEmail(
     await account.createVerification(callbackUrl);
     
     return { success: true, user };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Registration error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Registration failed';
     return { 
       success: false, 
-      error: error.message || 'Registration failed' 
+      error: errorMessage
     };
   }
 }
@@ -102,13 +106,14 @@ export async function sendMagicLink(
     const userId = `user${Date.now().toString(36).substring(0, 8)}`;
     const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`;
     
-    const result = await account.createMagicURLToken(userId, email, callbackUrl);
+    await account.createMagicURLToken(userId, email, callbackUrl);
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Magic link error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to send magic link';
     return { 
       success: false, 
-      error: error.message || 'Failed to send magic link' 
+      error: errorMessage
     };
   }
 }
@@ -130,17 +135,18 @@ export async function logout() {
 
 export async function verifyEmail(userId: string, secret: string) {
   try {
-    const session = await account.updateVerification(userId, secret);
+    await account.updateVerification(userId, secret);
     
     // Appwrite handles session cookies automatically
     // No need to manually set cookies
     
     return { success: true, user: await account.get() };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Email verification error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Email verification failed';
     return { 
       success: false, 
-      error: error.message || 'Email verification failed' 
+      error: errorMessage
     };
   }
 }

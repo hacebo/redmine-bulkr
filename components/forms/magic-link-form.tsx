@@ -24,8 +24,9 @@ export function MagicLinkForm() {
       } else {
         toast.error(result?.error || 'Failed to send magic link');
       }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to send magic link');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send magic link';
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }

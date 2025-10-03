@@ -27,7 +27,7 @@ This will start:
 ### 3. Set Up Database
 
 1. Go to **Database** section
-2. Create a new database called "redmine-bulkr"
+2. Create a new database called "redmine-bulkr-db"
 3. Note the Database ID
 
 ### 4. Create Redmine Credentials Collection

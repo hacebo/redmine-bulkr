@@ -4,6 +4,9 @@ import { getServerUser } from "@/lib/services/auth";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
+// Force dynamic rendering for all protected pages
+export const dynamic = 'force-dynamic';
+
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const user = await getServerUser();
   

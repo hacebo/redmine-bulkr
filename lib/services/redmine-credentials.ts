@@ -79,11 +79,12 @@ export async function saveRedmineCredentials(credentials: RedmineCredentialsInpu
       
       return { success: true, credentials: result };
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error saving Redmine credentials:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to save credentials';
     return { 
       success: false, 
-      error: error.message || 'Failed to save credentials' 
+      error: errorMessage
     };
   }
 }
@@ -105,9 +106,10 @@ export async function getRedmineCredentials(): Promise<RedmineCredentials | null
         REDMINE_CREDENTIALS_COLLECTION_ID,
         [Query.equal("userId", user.$id)]
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If user has no credentials yet, return null instead of throwing
-      if (error.code === 401 || error.code === 404) {
+      if (error && typeof error === 'object' && 'code' in error && 
+          (error.code === 401 || error.code === 404)) {
         return null;
       }
       throw error;
@@ -177,11 +179,12 @@ export async function deleteRedmineCredentials() {
     );
 
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error deleting Redmine credentials:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to delete credentials';
     return { 
       success: false, 
-      error: error.message || 'Failed to delete credentials' 
+      error: errorMessage
     };
   }
 }
@@ -206,11 +209,12 @@ export async function validateRedmineCredentials(baseUrl: string, apiKey: string
       user: data.user,
       message: 'Credentials validated successfully' 
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error validating Redmine credentials:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to validate credentials';
     return { 
       success: false, 
-      error: error.message || 'Failed to validate credentials' 
+      error: errorMessage
     };
   }
 }
