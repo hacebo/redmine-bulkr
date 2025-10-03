@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { createBulkTimeEntries } from '@/app/lib/actions/time-entries';
 import { toast } from 'sonner';
+import { validateTimeEntries } from '@/app/lib/utils/time-entry-validations';
 
 interface Project {
   id: number;
@@ -127,60 +128,21 @@ export function EnhancedTimeEntryForm({
   };
 
   const handleSubmit = async () => {
-    if (entries.length === 0) {
-      toast.error('Please add at least one time entry');
+    // Run validations
+    const validation = validateTimeEntries(entries);
+
+    // Handle errors (blocking)
+    if (!validation.isValid) {
+      validation.errors.forEach(error => {
+        toast.error(error.message);
+      });
       return;
     }
 
-    // Validation: Check for missing comments
-    const missingComments = entries.filter(entry => !entry.comments || entry.comments.trim() === '');
-    if (missingComments.length > 0) {
-      toast.error('Comments are required for all time entries');
-      return;
-    }
-
-    // Validation: Check for 0 hours entries
-    const zeroHourEntries = entries.filter(entry => entry.hours === 0);
-    if (zeroHourEntries.length > 0) {
-      const zeroHourDates = zeroHourEntries.map(e => format(parse(e.date, 'yyyy-MM-dd', new Date()), 'MMM d')).join(', ');
+    // Handle warnings (confirmation dialogs)
+    for (const warning of validation.warnings) {
       try {
-        await showConfirmDialog(
-          "Zero Hours Detected",
-          `You have entries with 0 hours on (${zeroHourDates}). Are you sure you want to continue?`
-        );
-      } catch {
-        return; // User cancelled
-      }
-    }
-
-    // Validation: Check for weekend entries
-    const weekendEntries = entries.filter(entry => {
-      const date = parse(entry.date, 'yyyy-MM-dd', new Date());
-      const day = date.getDay();
-      return day === 0 || day === 6;
-    });
-
-    if (weekendEntries.length > 0) {
-      const weekendDates = weekendEntries.map(e => format(parse(e.date, 'yyyy-MM-dd', new Date()), 'MMM d')).join(', ');
-      try {
-        await showConfirmDialog(
-          "Weekend Entry Detected",
-          `You have entries on weekend days (${weekendDates}). Do you want to continue?`
-        );
-      } catch {
-        return; // User cancelled
-      }
-    }
-
-    // Validation: Check for entries over 8 hours
-    const overEightEntries = entries.filter(entry => entry.hours > 8);
-    if (overEightEntries.length > 0) {
-      const overEightDates = overEightEntries.map(e => format(parse(e.date, 'yyyy-MM-dd', new Date()), 'MMM d')).join(', ');
-      try {
-        await showConfirmDialog(
-          "Hours Exceed 8 Per Day",
-          `The following days have more than 8 hours: ${overEightDates}. Is this correct?`
-        );
+        await showConfirmDialog(warning.title, warning.description);
       } catch {
         return; // User cancelled
       }

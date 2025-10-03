@@ -301,6 +301,7 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
                             {week.map((day, dayIndex) => {
                               const isCurrentMonth = isSameMonth(day, currentMonth);
                               const isToday = isSameDay(day, new Date());
+                              const isSelected = selectedDate && isSameDay(day, selectedDate);
                               
                               return (
                                 <div
@@ -309,10 +310,11 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
                                     min-h-[60px] p-2 border rounded-lg
                                     ${isCurrentMonth ? 'bg-background' : 'bg-muted/50'}
                                     ${isToday ? 'ring-2 ring-primary' : ''}
+                                    ${isSelected ? 'bg-violet-50 dark:bg-violet-950/30 border-violet-500 border-2' : ''}
                                   `}
                                 >
                                   <div className="flex flex-col h-full">
-                                    <div className="text-sm font-medium">
+                                    <div className={`text-sm font-medium ${isSelected ? 'text-violet-700 dark:text-violet-400' : ''}`}>
                                       {format(day, 'd')}
                                     </div>
                                     {isCurrentMonth && (
@@ -399,6 +401,7 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
                             const dayHours = getDayHours(day);
                             const zeroHourActivityName = getZeroHourEntry(day);
                             const isToday = isSameDay(day, new Date());
+                            const isSelected = selectedDate && isSameDay(day, selectedDate);
                             
                             return (
                               <div
@@ -407,12 +410,13 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
                                   min-h-[60px] p-2 border rounded-lg cursor-pointer transition-colors touch-manipulation
                                   ${isCurrentMonth ? 'bg-background' : 'bg-muted/50'}
                                   ${isToday ? 'ring-2 ring-primary' : ''}
+                                  ${isSelected ? 'bg-violet-50 dark:bg-violet-950/30 border-violet-500 border-2' : ''}
                                   hover:bg-muted active:bg-muted/80
                                 `}
                                 onClick={() => handleDateClick(day)}
                               >
                                 <div className="flex flex-col h-full">
-                                  <div className="text-sm font-medium">
+                                  <div className={`text-sm font-medium ${isSelected ? 'text-violet-700 dark:text-violet-400' : ''}`}>
                                     {format(day, 'd')}
                                   </div>
                                   <div className="text-xs text-muted-foreground mt-auto">
@@ -464,6 +468,14 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
                     <div className="space-y-2">
                       <div className="text-sm font-medium">Legend:</div>
                       <div className="flex flex-wrap gap-4 text-xs">
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 rounded border-2 border-primary" />
+                          <span>Today</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 rounded bg-violet-50 dark:bg-violet-950/30 border border-violet-500" />
+                          <span>Selected day</span>
+                        </div>
                         <div className="flex items-center gap-1">
                           <div className="w-3 h-3 rounded bg-blue-100 dark:bg-blue-900 border border-blue-200 dark:border-blue-800" />
                           <span>Special (0h entries)</span>

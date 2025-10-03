@@ -20,6 +20,7 @@ import { format, addDays, parse } from 'date-fns';
 import { createBulkTimeEntries } from '@/app/lib/actions/time-entries';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { validateTimeEntries } from '@/app/lib/utils/time-entry-validations';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 interface Project {
@@ -91,6 +92,7 @@ export function BulkEntryClient({
     title: string;
     description: string;
     onConfirm: () => void;
+    onCancel?: () => void;
   } | null>(null);
 
   // Calculate the bi-weekly period from the current week start
@@ -154,31 +156,6 @@ export function BulkEntryClient({
     return (dayOfWeek >= 1 && dayOfWeek <= 5) ? 8 : 0;
   };
 
-  const validateWeekendEntries = (entries: BulkEntry[]) => {
-    const weekendEntries = entries.filter(entry => {
-      const date = new Date(entry.date);
-      const dayOfWeek = date.getDay();
-      return dayOfWeek === 0 || dayOfWeek === 6;
-    });
-    return weekendEntries.length > 0 ? weekendEntries : null;
-  };
-
-  const validateDailyHours = (entries: BulkEntry[]) => {
-    const dailyTotals: Record<string, number> = {};
-    entries.forEach(entry => {
-      if (!dailyTotals[entry.date]) {
-        dailyTotals[entry.date] = 0;
-      }
-      dailyTotals[entry.date] += entry.hours;
-    });
-    
-    const overEightHours = Object.entries(dailyTotals)
-      .filter(([, total]) => total > 8)
-      .map(([date, total]) => ({ date, total }));
-    
-    return overEightHours.length > 0 ? overEightHours : null;
-  };
-
   const handleSubmit = async () => {
     if (!selectedProject) {
       toast.error('Please select a project first');
@@ -196,93 +173,43 @@ export function BulkEntryClient({
         }))
     );
 
-    if (bulkEntries.length === 0) {
-      toast.error('Please enter some hours');
-      return;
-    }
+    // Run validations using shared utility
+    const validation = validateTimeEntries(bulkEntries);
 
-    // Validation: Check for missing comments
-    const missingComments = bulkEntries.filter(entry => !entry.comments || entry.comments.trim() === '');
-    if (missingComments.length > 0) {
-      toast.error('Comments are required for all time entries');
-      return;
-    }
-
-    // Validation: Check for 0 hours entries
-    const zeroHourEntries = bulkEntries.filter(entry => entry.hours === 0);
-    if (zeroHourEntries.length > 0) {
-      const zeroHourDates = zeroHourEntries.map(e => e.date).join(', ');
-      return new Promise<void>((resolve) => {
-        setConfirmDialog({
-          open: true,
-          title: "Zero Hours Detected",
-          description: `You have entries with 0 hours on (${zeroHourDates}). Are you sure you want to continue?`,
-          onConfirm: () => {
-            setConfirmDialog(null);
-            resolve();
-          },
-        });
-      }).then(() => {
-        const weekendEntries = validateWeekendEntries(bulkEntries);
-        if (weekendEntries) {
-          return handleWeekendValidation(weekendEntries, bulkEntries);
-        }
-        const overEightHours = validateDailyHours(bulkEntries);
-        if (overEightHours) {
-          return validateOverEightHours(overEightHours, bulkEntries);
-        }
-        return submitEntries(bulkEntries);
+    // Handle errors (blocking)
+    if (!validation.isValid) {
+      validation.errors.forEach(error => {
+        toast.error(error.message);
       });
+      return;
     }
 
-    const weekendEntries = validateWeekendEntries(bulkEntries);
-    if (weekendEntries) {
-      return handleWeekendValidation(weekendEntries, bulkEntries);
-    }
-
-    const overEightHours = validateDailyHours(bulkEntries);
-    if (overEightHours) {
-      return validateOverEightHours(overEightHours, bulkEntries);
+    // Handle warnings (confirmation dialogs) sequentially
+    for (const warning of validation.warnings) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          setConfirmDialog({
+            open: true,
+            title: warning.title,
+            description: warning.description,
+            onConfirm: () => {
+              setConfirmDialog(null);
+              resolve();
+            },
+            onCancel: () => {
+              setConfirmDialog(null);
+              reject();
+            },
+          });
+        });
+      } catch {
+        return; // User cancelled
+      }
     }
 
     return submitEntries(bulkEntries);
   };
 
-  const handleWeekendValidation = (weekendEntries: BulkEntry[], bulkEntries: BulkEntry[]) => {
-    const weekendDates = weekendEntries.map(e => e.date).join(', ');
-    return new Promise<void>((resolve) => {
-      setConfirmDialog({
-        open: true,
-        title: "Weekend Entries Detected",
-        description: `You're adding time entries for weekend(s): ${weekendDates}. Is this correct?`,
-        onConfirm: () => {
-          setConfirmDialog(null);
-          resolve();
-        },
-      });
-    }).then(() => {
-      const overEightHours = validateDailyHours(bulkEntries);
-      if (overEightHours) {
-        return validateOverEightHours(overEightHours, bulkEntries);
-      }
-      return submitEntries(bulkEntries);
-    });
-  };
-
-  const validateOverEightHours = (overEightHours: Array<{ date: string; total: number }>, bulkEntries: BulkEntry[]) => {
-    const overEightDates = overEightHours.map(e => `${e.date} (${e.total}h)`).join(', ');
-    return new Promise<void>((resolve) => {
-      setConfirmDialog({
-        open: true,
-        title: "Hours Exceed 8 Per Day",
-        description: `The following days have more than 8 hours: ${overEightDates}. Is this correct?`,
-        onConfirm: () => {
-          setConfirmDialog(null);
-          resolve();
-        },
-      });
-    }).then(() => submitEntries(bulkEntries));
-  };
 
   const submitEntries = async (bulkEntries: BulkEntry[]) => {
 
@@ -746,7 +673,10 @@ export function BulkEntryClient({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setConfirmDialog(null)}>
+              <AlertDialogCancel onClick={() => {
+                confirmDialog.onCancel?.();
+                setConfirmDialog(null);
+              }}>
                 Cancel
               </AlertDialogCancel>
               <AlertDialogAction onClick={confirmDialog.onConfirm}>
