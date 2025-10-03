@@ -54,4 +54,8 @@ export const CACHE_CONFIG = {
     revalidate: 60, // 1 minute
     tagPrefix: 'time-entries',
   },
+  ISSUES: {
+    revalidate: 60 * 5, // 5 minutes
+    tagPrefix: 'issues',
+  },
 } as const;

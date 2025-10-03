@@ -18,10 +18,12 @@ import {
 import { ChevronLeft, ChevronRight, Plus, Trash2, ArrowLeft } from 'lucide-react';
 import { format, addDays, parse } from 'date-fns';
 import { createBulkTimeEntries } from '@/app/lib/actions/time-entries';
+import { getProjectIssues } from '@/app/lib/actions/projects';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { validateTimeEntries } from '@/app/lib/utils/time-entry-validations';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useEffect } from 'react';
 
 interface Project {
   id: number;
@@ -35,9 +37,16 @@ interface Activity {
   is_default: boolean;
 }
 
+interface Issue {
+  id: number;
+  subject: string;
+  tracker: { id: number; name: string };
+  status: { id: number; name: string };
+}
+
 interface TimeEntry {
   id: string;
-  issue: string;
+  issueId?: number;
   activityId: number;
   summary: string;
   dailyHours: Record<string, number>;
@@ -62,6 +71,7 @@ interface BulkEntryData {
 
 interface BulkEntry {
   projectId: number;
+  issueId?: number;
   activityId: number;
   date: string;
   hours: number;
@@ -86,6 +96,8 @@ export function BulkEntryClient({
   
   const currentWeekStart = initialWeekStart;
   const [entries, setEntries] = useState<TimeEntry[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [loadingIssues, setLoadingIssues] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -99,6 +111,27 @@ export function BulkEntryClient({
   const weekStart = parse(currentWeekStart, 'yyyy-MM-dd', new Date());
   const weekEnd = addDays(weekStart, 13);
 
+  // Load issues for the selected project
+  useEffect(() => {
+    const loadIssues = async () => {
+      if (!selectedProject) return;
+      
+      setLoadingIssues(true);
+      try {
+        const projectIssues = await getProjectIssues(selectedProject.id);
+        setIssues(projectIssues);
+      } catch (error) {
+        console.error('Error loading issues:', error);
+        toast.error('Failed to load issues. You can still create entries without selecting an issue.');
+        setIssues([]);
+      } finally {
+        setLoadingIssues(false);
+      }
+    };
+
+    loadIssues();
+  }, [selectedProject]);
+
   // Generate all days in the bi-weekly period
   const days = Array.from({ length: 14 }, (_, i) => addDays(weekStart, i));
   const dayLabels = days.map(day => ({
@@ -110,7 +143,7 @@ export function BulkEntryClient({
   const addEntry = () => {
     const newEntry: TimeEntry = {
       id: Date.now().toString(),
-      issue: '',
+      issueId: undefined,
       activityId: activities[0]?.id || 0,
       summary: '',
       dailyHours: {}
@@ -122,7 +155,7 @@ export function BulkEntryClient({
     setEntries(entries.filter(entry => entry.id !== id));
   };
 
-  const updateEntry = (id: string, field: keyof TimeEntry, value: string | number) => {
+  const updateEntry = (id: string, field: keyof TimeEntry, value: string | number | undefined) => {
     setEntries(entries.map(entry => 
       entry.id === id ? { ...entry, [field]: value } : entry
     ));
@@ -166,6 +199,7 @@ export function BulkEntryClient({
       Object.entries(entry.dailyHours)
         .map(([date, hours]) => ({
           projectId: selectedProject.id,
+          issueId: entry.issueId,
           activityId: entry.activityId,
           date,
           hours,
@@ -349,6 +383,30 @@ export function BulkEntryClient({
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* Issue Selector */}
+                  {loadingIssues ? (
+                    <div className="w-full px-3 py-2 bg-muted rounded-md text-sm text-muted-foreground">
+                      Loading issues...
+                    </div>
+                  ) : (
+                    <Select
+                      value={entry.issueId?.toString() || 'none'}
+                      onValueChange={(value) => updateEntry(entry.id, 'issueId', value === 'none' ? undefined : parseInt(value))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Issue (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No issue</SelectItem>
+                        {issues.map((issue) => (
+                          <SelectItem key={issue.id} value={issue.id.toString()}>
+                            #{issue.id}: {issue.subject}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
 
                   <Input
                     placeholder="Summary (required)"
@@ -586,7 +644,7 @@ export function BulkEntryClient({
             ) : (
               entries.map((entry) => (
                 <div key={entry.id} className="space-y-2">
-                  {/* Top Row: Delete Button + Activity + Summary */}
+                  {/* Top Row: Delete Button + Activity + Issue + Summary */}
                   <div className="flex gap-2 items-start">
                     <Button
                       variant="ghost"
@@ -615,6 +673,39 @@ export function BulkEntryClient({
                           ))}
                         </SelectContent>
                       </Select>
+
+                      {/* Issue Selector */}
+                      {loadingIssues ? (
+                        <div className="w-full px-3 py-2 bg-muted rounded-md text-sm text-muted-foreground min-h-[44px] flex items-center">
+                          Loading issues...
+                        </div>
+                      ) : (
+                        <Select
+                          value={entry.issueId?.toString() || 'none'}
+                          onValueChange={(value) => updateEntry(entry.id, 'issueId', value === 'none' ? undefined : parseInt(value))}
+                        >
+                          <SelectTrigger className="w-full min-h-[44px]">
+                            <div className="truncate w-full text-left text-sm">
+                              {entry.issueId 
+                                ? `#${entry.issueId}: ${issues.find(i => i.id === entry.issueId)?.subject || 'Unknown'}` 
+                                : 'Issue (optional)'}
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No issue (project-level)</SelectItem>
+                            {issues.map((issue) => (
+                              <SelectItem key={issue.id} value={issue.id.toString()}>
+                                <div className="flex flex-col">
+                                  <span>#{issue.id}: {issue.subject}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {issue.tracker.name} - {issue.status.name}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
 
                       <Input
                         placeholder="Summary (required)"

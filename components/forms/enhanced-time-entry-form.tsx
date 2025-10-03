@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { createBulkTimeEntries } from '@/app/lib/actions/time-entries';
+import { getProjectIssues } from '@/app/lib/actions/projects';
 import { toast } from 'sonner';
 import { validateTimeEntries } from '@/app/lib/utils/time-entry-validations';
 
@@ -39,9 +40,17 @@ interface Activity {
   is_default: boolean;
 }
 
+interface Issue {
+  id: number;
+  subject: string;
+  tracker: { id: number; name: string };
+  status: { id: number; name: string };
+}
+
 interface TimeEntry {
   id: string;
   projectId: number;
+  issueId?: number;
   activityId: number;
   date: string;
   hours: number;
@@ -67,11 +76,14 @@ export function EnhancedTimeEntryForm({
   const [entries, setEntries] = useState<TimeEntry[]>([{
     id: Date.now().toString(),
     projectId: selectedProject.id,
+    issueId: undefined,
     activityId: activities[0]?.id || 0,
     date: format(selectedDate, 'yyyy-MM-dd'),
     hours: 8,
     comments: '',
   }]);
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [loadingIssues, setLoadingIssues] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -91,10 +103,32 @@ export function EnhancedTimeEntryForm({
     }
   }, []);
 
+  // Load issues for the selected project
+  useEffect(() => {
+    const loadIssues = async () => {
+      if (!selectedProject) return;
+      
+      setLoadingIssues(true);
+      try {
+        const projectIssues = await getProjectIssues(selectedProject.id);
+        setIssues(projectIssues);
+      } catch (error) {
+        console.error('Error loading issues:', error);
+        toast.error('Failed to load issues. You can still create entries without selecting an issue.');
+        setIssues([]);
+      } finally {
+        setLoadingIssues(false);
+      }
+    };
+
+    loadIssues();
+  }, [selectedProject]);
+
   const addEntry = () => {
     const newEntry: TimeEntry = {
       id: Date.now().toString(),
       projectId: selectedProject.id,
+      issueId: undefined,
       activityId: activities[0]?.id || 0,
       date: format(selectedDate, 'yyyy-MM-dd'),
       hours: 8,
@@ -103,7 +137,7 @@ export function EnhancedTimeEntryForm({
     setEntries([...entries, newEntry]);
   };
 
-  const updateEntry = (id: string, field: keyof TimeEntry, value: string | number) => {
+  const updateEntry = (id: string, field: keyof TimeEntry, value: string | number | undefined) => {
     setEntries(entries.map(entry => 
       entry.id === id ? { ...entry, [field]: value } : entry
     ));
@@ -159,6 +193,7 @@ export function EnhancedTimeEntryForm({
       setEntries([{
         id: Date.now().toString(),
         projectId: selectedProject.id,
+        issueId: undefined,
         activityId: activities[0]?.id || 0,
         date: format(selectedDate, 'yyyy-MM-dd'),
         hours: 8,
@@ -246,6 +281,38 @@ export function EnhancedTimeEntryForm({
                 <div className="w-full px-3 py-2 bg-muted rounded-md text-sm">
                   {selectedProject.name}
                 </div>
+              </div>
+
+              {/* Issue Selector */}
+              <div className="space-y-2">
+                <Label htmlFor={`issue-${entry.id}`}>Issue (Optional)</Label>
+                {loadingIssues ? (
+                  <div className="w-full px-3 py-2 bg-muted rounded-md text-sm text-muted-foreground">
+                    Loading issues...
+                  </div>
+                ) : (
+                  <Select
+                    value={entry.issueId?.toString() || 'none'}
+                    onValueChange={(value) => updateEntry(entry.id, 'issueId', value === 'none' ? undefined : parseInt(value))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select an issue or leave blank" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No issue (project-level entry)</SelectItem>
+                      {issues.map((issue) => (
+                        <SelectItem key={issue.id} value={issue.id.toString()}>
+                          <div className="flex flex-col">
+                            <span>#{issue.id}: {issue.subject}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {issue.tracker.name} - {issue.status.name}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">

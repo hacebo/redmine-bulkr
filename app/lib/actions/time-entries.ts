@@ -3,11 +3,12 @@
 import { getServerUser } from '@/lib/services/auth';
 import { getRedmineClientForUser, getRedmineUserId } from '../services/redmineClient';
 import { z } from 'zod';
-import { TimeEntry, WeeklyTimeData, RedmineTimeEntry, RedmineApiError } from '../types';
+import { TimeEntry, WeeklyTimeData, RedmineTimeEntry, RedmineApiError, RedmineTimeEntryPayload } from '../types';
 
 const bulkTimeEntrySchema = z.object({
   entries: z.array(z.object({
     projectId: z.number().min(1, 'Project is required'),
+    issueId: z.number().optional(),
     activityId: z.number().min(1, 'Activity is required'),
     date: z.string().min(1, 'Date is required').regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
     hours: z.number().min(0, 'Hours must be positive').max(24, 'Hours cannot exceed 24 per day'),
@@ -42,9 +43,29 @@ export async function createBulkTimeEntries(formData: FormData) {
 
     const results = [];
     for (const entry of validatedData.entries) {
-      const redmineEntry = {
+      // Validate that issue belongs to the selected project (if issueId is provided)
+      if (entry.issueId) {
+        try {
+          const issueData = await redmineService.getIssue(entry.issueId);
+          const issue = issueData.issue;
+          
+          if (issue.project.id !== entry.projectId) {
+            throw new Error(
+              `Issue #${entry.issueId} belongs to project "${issue.project.name}", not the selected project. Please select a different issue.`
+            );
+          }
+        } catch (error) {
+          if (error instanceof RedmineApiError && error.code === 'NOT_FOUND') {
+            throw new Error(`Issue #${entry.issueId} does not exist or you don't have permission to access it.`);
+          }
+          throw error;
+        }
+      }
+
+      const redmineEntry: RedmineTimeEntryPayload = {
         time_entry: {
           project_id: entry.projectId,
+          ...(entry.issueId && { issue_id: entry.issueId }),
           spent_on: entry.date,
           hours: entry.hours,
           activity_id: entry.activityId,
@@ -102,6 +123,7 @@ export async function getWeeklyTimeEntries(weekStart: string): Promise<WeeklyTim
     const entries: TimeEntry[] = (data.time_entries || []).map((entry: RedmineTimeEntry) => ({
       id: entry.id,
       projectId: entry.project.id,
+      issueId: entry.issue?.id,
       activityId: entry.activity.id,
       activityName: entry.activity.name,
       date: entry.spent_on,
@@ -167,6 +189,7 @@ export async function getMonthlyTimeEntries(monthStart: string, monthEnd: string
     const entries: TimeEntry[] = (data.time_entries || []).map((entry: RedmineTimeEntry) => ({
       id: entry.id,
       projectId: entry.project.id,
+      issueId: entry.issue?.id,
       activityId: entry.activity.id,
       activityName: entry.activity.name,
       date: entry.spent_on,

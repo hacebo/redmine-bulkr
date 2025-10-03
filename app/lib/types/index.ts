@@ -18,9 +18,19 @@ export interface Activity {
   is_default: boolean;
 }
 
+export interface Issue {
+  id: number;
+  subject: string;
+  project: { id: number; name: string };
+  tracker: { id: number; name: string };
+  status: { id: number; name: string };
+  priority: { id: number; name: string };
+}
+
 export interface TimeEntry {
   id: number;
   projectId: number;
+  issueId?: number;
   activityId: number;
   activityName: string;
   date: string;
@@ -72,9 +82,19 @@ export interface RedmineActivity {
   is_active: boolean;
 }
 
+export interface RedmineIssue {
+  id: number;
+  subject: string;
+  project: { id: number; name: string };
+  tracker: { id: number; name: string };
+  status: { id: number; name: string };
+  priority: { id: number; name: string };
+}
+
 export interface RedmineTimeEntry {
   id: number;
   project: { id: number; name: string };
+  issue?: { id: number };
   activity: { id: number; name: string };
   user: { id: number; name: string };
   spent_on: string;
@@ -87,10 +107,23 @@ export interface RedmineTimeEntry {
 // Form data types
 export interface TimeEntryFormData {
   projectId: number;
+  issueId?: number;
   activityId: number;
   date: string;
   hours: number;
   comments?: string;
+}
+
+// Redmine API payload types
+export interface RedmineTimeEntryPayload {
+  time_entry: {
+    project_id: number;
+    issue_id?: number;
+    spent_on: string;
+    hours: number;
+    activity_id: number;
+    comments: string;
+  };
 }
 
 export interface BulkTimeEntryData {

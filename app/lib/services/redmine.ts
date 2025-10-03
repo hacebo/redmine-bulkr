@@ -98,6 +98,20 @@ export class RedmineService {
     return this.makeRequest('/enumerations/time_entry_activities.json');
   }
 
+  async getIssues(projectId: number, limit: number = 100) {
+    const params = new URLSearchParams();
+    params.append('project_id', projectId.toString());
+    params.append('status_id', 'open');
+    params.append('limit', limit.toString());
+    params.append('sort', 'updated_on:desc');
+    
+    return this.makeRequest(`/issues.json?${params.toString()}`);
+  }
+
+  async getIssue(issueId: number) {
+    return this.makeRequest(`/issues/${issueId}.json`);
+  }
+
   async getTimeEntries(userId?: number, from?: string, to?: string, limit: number = 100) {
     let endpoint = '/time_entries.json';
     const params = new URLSearchParams();
