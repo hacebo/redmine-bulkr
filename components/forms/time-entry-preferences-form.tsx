@@ -7,15 +7,15 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { updateTimeEntryPreferences, TimeEntryPreferences } from '@/app/(protected)/settings/preferences/actions';
 
-interface PreferencesFormProps {
+interface TimeEntryPreferencesFormProps {
   initialPreferences: TimeEntryPreferences;
 }
 
-export function PreferencesForm({ initialPreferences }: PreferencesFormProps) {
+export function TimeEntryPreferencesForm({ initialPreferences }: TimeEntryPreferencesFormProps) {
   const [requireIssue, setRequireIssue] = useState(initialPreferences.requireIssue);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setIsSubmitting(true);
 
@@ -33,13 +33,13 @@ export function PreferencesForm({ initialPreferences }: PreferencesFormProps) {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
+          <div className="space-y-0.5 flex-1">
             <Label htmlFor="requireIssue">Require Issue for Time Entries</Label>
             <p className="text-sm text-muted-foreground">
               When enabled, all time entries must be associated with a specific issue. 

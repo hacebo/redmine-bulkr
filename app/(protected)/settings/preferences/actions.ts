@@ -16,7 +16,7 @@ export async function getTimeEntryPreferences(): Promise<TimeEntryPreferences> {
 
   // Default preferences
   const defaults: TimeEntryPreferences = {
-    requireIssue: false,
+    requireIssue: true,  // Enabled by default - issues required
   };
 
   try {
@@ -64,4 +64,5 @@ export async function updateTimeEntryPreferences(preferences: TimeEntryPreferenc
     };
   }
 }
+
 

@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { PreferencesForm } from '@/components/forms/preferences-form';
+import { TimeEntryPreferencesForm } from '@/components/forms/time-entry-preferences-form';
 
 export default async function PreferencesPage() {
   const preferences = await getTimeEntryPreferences();
@@ -23,7 +23,7 @@ export default async function PreferencesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <PreferencesForm initialPreferences={preferences} />
+          <TimeEntryPreferencesForm initialPreferences={preferences} />
         </CardContent>
       </Card>
     </div>
