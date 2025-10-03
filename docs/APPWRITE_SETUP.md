@@ -46,7 +46,11 @@ Create a collection called "redmine_credentials" with the following attributes:
 **Note:** The `redmineUserId` field stores the Redmine user ID to avoid API calls for user identification. It's automatically populated when credentials are saved.
 
 **Indexes:**
-- Create an index on `userId` for fast lookups
+- Create a **Key Index** on `userId` for fast lookups and filtering
+  - Type: Key Index
+  - Attribute: `userId`
+  - Size: 255
+  - Order: ASC
 
 **Permissions:**
 - Create: Authenticated users only
