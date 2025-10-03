@@ -8,6 +8,7 @@ import {
   LogOut,
   ChevronsUpDown,
   User,
+  Sliders,
 } from "lucide-react";
 
 import {
@@ -31,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { toast } from "sonner";
 import { logoutAction } from "@/lib/actions/logout";
 
@@ -50,7 +51,6 @@ const navItems = [
 
 export function AppSidebar({ user }: { user: { email: string; name?: string | null } }) {
   const pathname = usePathname();
-  const router = useRouter();
 
   async function handleLogout() {
     try {
@@ -139,6 +139,12 @@ export function AppSidebar({ user }: { user: { email: string; name?: string | nu
                   <a href="/settings/redmine" className="cursor-pointer">
                     <Settings className="h-4 w-4 mr-2" />
                     Redmine Settings
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <a href="/settings/preferences" className="cursor-pointer">
+                    <Sliders className="h-4 w-4 mr-2" />
+                    Preferences
                   </a>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />

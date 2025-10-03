@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, Plus, Trash2, X } from 'lucide-react';
-import { format, parse } from 'date-fns';
+import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import {
   AlertDialog,
@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { createBulkTimeEntries } from '@/app/lib/actions/time-entries';
 import { getProjectIssues } from '@/app/lib/actions/projects';
+import { getTimeEntryPreferences } from '@/app/(protected)/settings/preferences/actions';
 import { toast } from 'sonner';
 import { validateTimeEntries } from '@/app/lib/utils/time-entry-validations';
 
@@ -84,6 +85,7 @@ export function EnhancedTimeEntryForm({
   }]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loadingIssues, setLoadingIssues] = useState(false);
+  const [requireIssue, setRequireIssue] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -103,11 +105,20 @@ export function EnhancedTimeEntryForm({
     }
   }, []);
 
-  // Load issues for the selected project
+  // Load preferences and issues for the selected project
   useEffect(() => {
-    const loadIssues = async () => {
+    const loadData = async () => {
       if (!selectedProject) return;
       
+      // Load preferences
+      try {
+        const prefs = await getTimeEntryPreferences();
+        setRequireIssue(prefs.requireIssue);
+      } catch (error) {
+        console.error('Error loading preferences:', error);
+      }
+      
+      // Load issues
       setLoadingIssues(true);
       try {
         const projectIssues = await getProjectIssues(selectedProject.id);
@@ -121,7 +132,7 @@ export function EnhancedTimeEntryForm({
       }
     };
 
-    loadIssues();
+    loadData();
   }, [selectedProject]);
 
   const addEntry = () => {
@@ -162,8 +173,8 @@ export function EnhancedTimeEntryForm({
   };
 
   const handleSubmit = async () => {
-    // Run validations
-    const validation = validateTimeEntries(entries);
+    // Run validations with requireIssue preference
+    const validation = validateTimeEntries(entries, { requireIssue });
 
     // Handle errors (blocking)
     if (!validation.isValid) {
@@ -285,7 +296,9 @@ export function EnhancedTimeEntryForm({
 
               {/* Issue Selector */}
               <div className="space-y-2">
-                <Label htmlFor={`issue-${entry.id}`}>Issue (Optional)</Label>
+                <Label htmlFor={`issue-${entry.id}`}>
+                  Issue {requireIssue ? <span className="text-destructive">*</span> : '(Optional)'}
+                </Label>
                 {loadingIssues ? (
                   <div className="w-full px-3 py-2 bg-muted rounded-md text-sm text-muted-foreground">
                     Loading issues...
@@ -299,7 +312,7 @@ export function EnhancedTimeEntryForm({
                       <SelectValue placeholder="Select an issue or leave blank" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">No issue (project-level entry)</SelectItem>
+                      {!requireIssue && <SelectItem value="none">No issue (project-level entry)</SelectItem>}
                       {issues.map((issue) => (
                         <SelectItem key={issue.id} value={issue.id.toString()}>
                           <div className="flex flex-col">

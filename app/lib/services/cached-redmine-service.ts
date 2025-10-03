@@ -4,7 +4,7 @@ import { getServerUser } from '@/lib/services/auth';
 import { getDecryptedRedmineCredentials } from '@/lib/services/redmine-credentials';
 import { RedmineService } from '../services/redmine';
 import { RedmineApiError } from '../types';
-import { createUserScopedCache, CACHE_CONFIG } from '../cache';
+import { createUserScopedCache } from '../cache';
 
 /**
  * Helper to create cached Redmine API calls

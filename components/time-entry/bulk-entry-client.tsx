@@ -19,6 +19,7 @@ import { ChevronLeft, ChevronRight, Plus, Trash2, ArrowLeft } from 'lucide-react
 import { format, addDays, parse } from 'date-fns';
 import { createBulkTimeEntries } from '@/app/lib/actions/time-entries';
 import { getProjectIssues } from '@/app/lib/actions/projects';
+import { getTimeEntryPreferences } from '@/app/(protected)/settings/preferences/actions';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { validateTimeEntries } from '@/app/lib/utils/time-entry-validations';
@@ -98,6 +99,7 @@ export function BulkEntryClient({
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loadingIssues, setLoadingIssues] = useState(false);
+  const [requireIssue, setRequireIssue] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -111,11 +113,20 @@ export function BulkEntryClient({
   const weekStart = parse(currentWeekStart, 'yyyy-MM-dd', new Date());
   const weekEnd = addDays(weekStart, 13);
 
-  // Load issues for the selected project
+  // Load preferences and issues for the selected project
   useEffect(() => {
-    const loadIssues = async () => {
+    const loadData = async () => {
       if (!selectedProject) return;
       
+      // Load preferences
+      try {
+        const prefs = await getTimeEntryPreferences();
+        setRequireIssue(prefs.requireIssue);
+      } catch (error) {
+        console.error('Error loading preferences:', error);
+      }
+      
+      // Load issues
       setLoadingIssues(true);
       try {
         const projectIssues = await getProjectIssues(selectedProject.id);
@@ -129,7 +140,7 @@ export function BulkEntryClient({
       }
     };
 
-    loadIssues();
+    loadData();
   }, [selectedProject]);
 
   // Generate all days in the bi-weekly period
@@ -207,8 +218,8 @@ export function BulkEntryClient({
         }))
     );
 
-    // Run validations using shared utility
-    const validation = validateTimeEntries(bulkEntries);
+    // Run validations using shared utility with requireIssue preference
+    const validation = validateTimeEntries(bulkEntries, { requireIssue });
 
     // Handle errors (blocking)
     if (!validation.isValid) {
@@ -395,10 +406,10 @@ export function BulkEntryClient({
                       onValueChange={(value) => updateEntry(entry.id, 'issueId', value === 'none' ? undefined : parseInt(value))}
                     >
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Issue (optional)" />
+                        <SelectValue placeholder={requireIssue ? "Issue (required)" : "Issue (optional)"} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">No issue</SelectItem>
+                        {!requireIssue && <SelectItem value="none">No issue</SelectItem>}
                         {issues.map((issue) => (
                           <SelectItem key={issue.id} value={issue.id.toString()}>
                             #{issue.id}: {issue.subject}
@@ -688,11 +699,11 @@ export function BulkEntryClient({
                             <div className="truncate w-full text-left text-sm">
                               {entry.issueId 
                                 ? `#${entry.issueId}: ${issues.find(i => i.id === entry.issueId)?.subject || 'Unknown'}` 
-                                : 'Issue (optional)'}
+                                : requireIssue ? 'Issue (required)' : 'Issue (optional)'}
                             </div>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="none">No issue (project-level)</SelectItem>
+                            {!requireIssue && <SelectItem value="none">No issue (project-level)</SelectItem>}
                             {issues.map((issue) => (
                               <SelectItem key={issue.id} value={issue.id.toString()}>
                                 <div className="flex flex-col">

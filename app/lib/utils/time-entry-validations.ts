@@ -2,6 +2,7 @@ import { format, parse } from 'date-fns';
 
 export interface TimeEntryValidation {
   projectId: number;
+  issueId?: number;
   activityId: number;
   date: string;
   hours: number;
@@ -22,13 +23,17 @@ export interface ValidationWarning {
 }
 
 export interface ValidationError {
-  type: 'missing_comments' | 'no_entries';
+  type: 'missing_comments' | 'no_entries' | 'missing_issue';
   message: string;
 }
 
-export function validateTimeEntries(entries: TimeEntryValidation[]): ValidationResult {
+export function validateTimeEntries(
+  entries: TimeEntryValidation[], 
+  options: { requireIssue?: boolean } = {}
+): ValidationResult {
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];
+  const { requireIssue = false } = options;
 
   // Error: No entries
   if (entries.length === 0) {
@@ -37,6 +42,18 @@ export function validateTimeEntries(entries: TimeEntryValidation[]): ValidationR
       message: 'Please add at least one time entry'
     });
     return { isValid: false, warnings, errors };
+  }
+
+  // Error: Missing issue (if required by preferences)
+  if (requireIssue) {
+    const missingIssue = entries.filter(entry => !entry.issueId);
+    if (missingIssue.length > 0) {
+      errors.push({
+        type: 'missing_issue',
+        message: 'Issue is required for all time entries. Please select an issue or change your preferences in Settings.'
+      });
+      return { isValid: false, warnings, errors };
+    }
   }
 
   // Error: Missing comments
