@@ -10,7 +10,11 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { MagicLinkForm } from './magic-link-form';
 import { Client, Account } from 'appwrite';
 
-export function LoginForm() {
+interface LoginFormProps {
+  enablePasswordLogin?: boolean;
+}
+
+export function LoginForm({ enablePasswordLogin = false }: LoginFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +61,22 @@ export function LoginForm() {
       setIsLoading(false);
     }
   };
+
+  if (!enablePasswordLogin) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Sign In</CardTitle>
+          <CardDescription>
+            We&apos;ll send you a secure link to sign in without a password
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <MagicLinkForm />
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

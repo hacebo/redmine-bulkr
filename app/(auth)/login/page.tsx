@@ -9,6 +9,8 @@ export default async function LoginPage() {
     redirect('/time-tracking');
   }
 
+  const enablePasswordLogin = process.env.ENABLE_PASSWORD_LOGIN === 'true';
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-md space-y-8 p-6">
@@ -18,7 +20,7 @@ export default async function LoginPage() {
             Sign in to manage your Redmine time entries
           </p>
         </div>
-        <LoginForm />
+        <LoginForm enablePasswordLogin={enablePasswordLogin} />
       </div>
     </div>
   );
