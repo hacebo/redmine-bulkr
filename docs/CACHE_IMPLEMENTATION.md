@@ -71,22 +71,26 @@ export function createUserScopedCache<T>(
 ### Reading Cached Data
 
 ```typescript
+export async function getProjectsServerOnly(): Promise<Project[]> {
+  const credentials = await getDecryptedRedmineCredentialsServer();
+  if (!credentials) {
+    throw new Error('No Redmine credentials found');
+  }
+
+  const service = new RedmineService(credentials.baseUrl, credentials.apiKey);
+  const data = await service.getProjects();
+  
+  return data.projects.map(/* transform */);
+}
+
+// Or with caching:
 export async function getProjects(): Promise<Project[]> {
-  const user = await getServerUser();
-  const credentials = await getDecryptedRedmineCredentials();
-
-  // Create a closure that captures credentials
-  const fetchProjectsRaw = async () => {
-    const client = new RedmineService(credentials.baseUrl, credentials.apiKey);
-    const data = await client.getProjects();
-    return data.projects.map(/* transform */);
-  };
-
-  // Create cached version
-  const getProjectsCached = createUserScopedCache(
-    fetchProjectsRaw,
+  return createCachedRedmineCall(
     'projects',
-    { userId: user.$id, baseUrl: credentials.baseUrl },
+    async (service) => {
+      const data = await service.getProjects();
+      return data.projects.map(/* transform */);
+    },
     {
       revalidate: CACHE_CONFIG.PROJECTS.revalidate,
       tagPrefix: CACHE_CONFIG.PROJECTS.tagPrefix,

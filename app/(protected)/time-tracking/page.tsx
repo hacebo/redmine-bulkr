@@ -1,10 +1,10 @@
-import { getServerUser } from '@/lib/services/auth';
+import { requireUserForPage } from '@/lib/auth.server';
 import { redirect } from 'next/navigation';
 import { MainDashboard } from '@/components/dashboard/main-dashboard';
 import { Suspense } from 'react';
 import { DashboardLoadingSkeleton } from '@/components/shared/loading-skeletons';
-import { getRedmineCredentials } from '@/lib/services/redmine-credentials';
-import { getProjects, getActivities } from '@/app/lib/actions/projects';
+import { getRedmineCredentialsServer } from '@/lib/services/redmine-credentials-server';
+import { getProjectsServerOnly, getActivitiesServerOnly } from '@/app/lib/actions/projects';
 
 interface TimeTrackingPageProps {
   searchParams: Promise<{
@@ -13,14 +13,14 @@ interface TimeTrackingPageProps {
 }
 
 export default async function TimeTrackingPage({ searchParams }: TimeTrackingPageProps) {
-  const user = await getServerUser();
-  
-  if (!user) {
+  try {
+    await requireUserForPage();
+  } catch {
     redirect('/login');
   }
 
   // Check if user has Redmine credentials configured
-  const credentials = await getRedmineCredentials();
+  const credentials = await getRedmineCredentialsServer();
   if (!credentials) {
     redirect('/settings/redmine');
   }
@@ -30,8 +30,8 @@ export default async function TimeTrackingPage({ searchParams }: TimeTrackingPag
 
   // Fetch data directly in the page (React 19 pattern)
   const dataPromise = Promise.all([
-    getProjects(),
-    getActivities()
+    getProjectsServerOnly(),
+    getActivitiesServerOnly()
   ]).then(([projects, activities]) => ({
     projects,
     activities

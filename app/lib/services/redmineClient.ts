@@ -1,11 +1,11 @@
-import { getDecryptedRedmineCredentials } from "@/lib/services/redmine-credentials";
+import { getDecryptedRedmineCredentialsServer } from "@/lib/services/redmine-credentials-server";
 import { RedmineService } from "./redmine";
 
 /**
  * Get Redmine HTTP client for the current authenticated user
  */
 export async function getRedmineClientForUser(): Promise<RedmineService> {
-  const credentials = await getDecryptedRedmineCredentials();
+  const credentials = await getDecryptedRedmineCredentialsServer();
   if (!credentials) {
     throw new Error("No Redmine credentials found. Please configure your Redmine settings.");
   }
@@ -18,7 +18,7 @@ export async function getRedmineClientForUser(): Promise<RedmineService> {
  * Use this when you need to filter queries by user (e.g., time entries)
  */
 export async function getRedmineUserId(): Promise<number> {
-  const credentials = await getDecryptedRedmineCredentials();
+  const credentials = await getDecryptedRedmineCredentialsServer();
   
   if (!credentials) {
     throw new Error('No Redmine credentials found. Please configure your credentials in Settings → Redmine.');

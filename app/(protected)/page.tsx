@@ -1,5 +1,6 @@
-import { redirect } from "next/navigation";
+import { requireUserForPage } from "@/lib/auth.server";
 
-export default async function ProtectedHome() {
-  redirect("/time-tracking");
+export default async function AppHome() {
+  const user = await requireUserForPage(); // throws -> redirect by caller
+  return <div>Welcome, {user.email}</div>;
 }

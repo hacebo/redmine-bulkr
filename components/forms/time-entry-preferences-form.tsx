@@ -1,42 +1,49 @@
-'use client';
-
-import { useState } from 'react';
+"use client";
+import { useTransition, useEffect, useState } from "react";
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { getAppwriteJWT } from "@/lib/appwrite-jwt.client";
+import { updatePrefsWithJWT, getTimeEntryPreferencesWithJWT } from '@/app/(protected)/settings/preferences/actions';
 import { toast } from 'sonner';
-import { updateTimeEntryPreferences, TimeEntryPreferences } from '@/app/(protected)/settings/preferences/actions';
 
-interface TimeEntryPreferencesFormProps {
-  initialPreferences: TimeEntryPreferences;
-}
+export function TimeEntryPreferencesForm() {
+  const [pending, start] = useTransition();
+  const [requireIssue, setRequireIssue] = useState(true); // Default
+  const [loading, setLoading] = useState(true);
 
-export function TimeEntryPreferencesForm({ initialPreferences }: TimeEntryPreferencesFormProps) {
-  const [requireIssue, setRequireIssue] = useState(initialPreferences.requireIssue);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setIsSubmitting(true);
-
-    try {
-      const result = await updateTimeEntryPreferences({ requireIssue });
-      
-      if (result.success) {
-        toast.success(result.message || 'Preferences saved!');
-      } else {
-        toast.error(result.error || 'Failed to save preferences');
+  // Fetch preferences on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const jwt = await getAppwriteJWT();
+        const prefs = await getTimeEntryPreferencesWithJWT(jwt);
+        setRequireIssue(prefs.requireIssue);
+      } catch (error) {
+        console.error('Error loading preferences:', error);
+        toast.error('Failed to load preferences');
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error saving preferences:', error);
-      toast.error('Failed to save preferences');
-    } finally {
-      setIsSubmitting(false);
-    }
+    })();
+  }, []);
+
+  async function onSubmit(formData: FormData) {
+    const prefs = { requireIssue: formData.get("requireIssue") === "on" };
+    const jwt = await getAppwriteJWT();
+    start(async () => {
+      try {
+        await updatePrefsWithJWT(jwt, prefs);
+        toast.success('Preferences saved successfully!');
+      } catch (error) {
+        console.error('Error saving preferences:', error);
+        toast.error('Failed to save preferences');
+      }
+    });
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form action={onSubmit} className="space-y-6">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5 flex-1">
@@ -48,14 +55,16 @@ export function TimeEntryPreferencesForm({ initialPreferences }: TimeEntryPrefer
           </div>
           <Switch
             id="requireIssue"
+            name="requireIssue"
             checked={requireIssue}
             onCheckedChange={setRequireIssue}
+            disabled={loading}
           />
         </div>
       </div>
 
-      <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? 'Saving...' : 'Save Preferences'}
+      <Button type="submit" disabled={pending || loading}>
+        {loading ? "Loading..." : pending ? "Saving..." : "Save Preferences"}
       </Button>
     </form>
   );

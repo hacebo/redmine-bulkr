@@ -1,4 +1,4 @@
-import { getServerUser } from "@/lib/services/auth";
+import { requireUserForPage } from "@/lib/auth.server";
 import {
   Card,
   CardContent,
@@ -15,11 +15,7 @@ import { AlertTriangle } from "lucide-react";
 import { ClearAccountDataForm } from "@/components/forms/delete-account-form";
 
 export default async function AccountSettingsPage() {
-  const user = await getServerUser();
-
-  if (!user) {
-    return null;
-  }
+  const user = await requireUserForPage();
 
   return (
     <div className="max-w-2xl">
@@ -33,19 +29,11 @@ export default async function AccountSettingsPage() {
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between py-2">
             <span className="text-sm text-muted-foreground">Email:</span>
-            <span className="text-sm font-medium">{user.email}</span>
-          </div>
-          <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-muted-foreground">Name:</span>
-            <span className="text-sm font-medium">{user.name || 'Not set'}</span>
+            <span className="text-sm font-medium">{user.email || 'Not available'}</span>
           </div>
           <div className="flex items-center justify-between py-2">
             <span className="text-sm text-muted-foreground">User ID:</span>
-            <span className="text-sm font-mono text-xs">{user.$id}</span>
-          </div>
-          <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-muted-foreground">Email Verified:</span>
-            <span className="text-sm">{user.emailVerification ? 'Yes' : 'No'}</span>
+            <span className="text-sm font-mono text-xs">{user.userId}</span>
           </div>
         </CardContent>
       </Card>

@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
-import { saveRedmineCredentials } from "@/lib/services/redmine-credentials";
-import { getServerUser } from "@/lib/services/auth";
+import { requireUserForServer } from "@/lib/auth.server";
 
 function normalizeUrl(url: string) {
   return url.replace(/\/$/, "");
@@ -10,13 +9,7 @@ function normalizeUrl(url: string) {
 
 export async function saveRedmineCredentialAction(formData: FormData) {
   try {
-    const user = await getServerUser();
-    if (!user) {
-      return {
-        success: false,
-        error: "User not authenticated"
-      };
-    }
+    const user = await requireUserForServer();
 
     const baseUrl = normalizeUrl(String(formData.get("baseUrl") || ""));
     const apiKey = String(formData.get("apiKey") || "");
@@ -28,7 +21,9 @@ export async function saveRedmineCredentialAction(formData: FormData) {
       };
     }
 
-    const result = await saveRedmineCredentials({ baseUrl, apiKey });
+    // Use the server-only version that works with our cookie auth
+    const { saveRedmineCredentialsServer } = await import("@/lib/services/redmine-credentials-server");
+    const result = await saveRedmineCredentialsServer({ baseUrl, apiKey });
 
     if (!result.success) {
       return {
@@ -38,9 +33,9 @@ export async function saveRedmineCredentialAction(formData: FormData) {
     }
 
     // Invalidate all cached data for this user since credentials changed
-    revalidateTag(`projects:${user.$id}`);
-    revalidateTag(`activities:${user.$id}`);
-    revalidateTag(`time-entries:${user.$id}`);
+    revalidateTag(`projects:${user.userId}`);
+    revalidateTag(`activities:${user.userId}`);
+    revalidateTag(`time-entries:${user.userId}`);
     revalidatePath("/time-tracking");
     
     return {
@@ -60,9 +55,9 @@ export async function saveRedmineCredentialAction(formData: FormData) {
 
 export async function testRedmineConnectionAction() {
   try {
-    const { getDecryptedRedmineCredentials } = await import("@/lib/services/redmine-credentials");
+    const { getDecryptedRedmineCredentialsServer } = await import("@/lib/services/redmine-credentials-server");
     
-    const credentials = await getDecryptedRedmineCredentials();
+    const credentials = await getDecryptedRedmineCredentialsServer();
     if (!credentials) {
       return { 
         success: false, 

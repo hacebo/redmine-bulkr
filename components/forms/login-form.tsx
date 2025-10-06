@@ -1,27 +1,62 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { loginWithEmail } from '@/lib/services/auth';
 import { MagicLinkForm } from './magic-link-form';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { Client, Account } from 'appwrite';
 
 export function LoginForm() {
-  const router = useRouter();
-  const [state, formAction] = useActionState(loginWithEmail, null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (state?.success) {
-      router.push('/time-tracking');
-      router.refresh();
+  const handleEmailLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const formData = new FormData(e.currentTarget);
+      const email = formData.get('email') as string;
+      const password = formData.get('password') as string;
+
+      if (!email || !password) {
+        setError('Email and password are required');
+        return;
+      }
+
+      // Create Appwrite session
+      const client = new Client()
+        .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
+        .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!);
+      const account = new Account(client);
+
+      await account.createEmailPasswordSession(email, password);
+      await account.get();
+
+      const { jwt } = await account.createJWT();
+
+      const sessionResponse = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${jwt}` }
+      });
+
+      if (!sessionResponse.ok) {
+        throw new Error('Failed to create session cookie');
+      }
+
+      window.location.href = '/time-tracking';
+    } catch (err) {
+      console.error('Login error:', err);
+      setError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
+      setIsLoading(false);
     }
-  }, [state?.success, router]);
+  };
 
   return (
     <Card>
@@ -39,10 +74,10 @@ export function LoginForm() {
           </TabsList>
           
           <TabsContent value="password" className="space-y-4">
-            <form action={formAction} className="space-y-4">
-              {state?.error && (
+            <form onSubmit={handleEmailLogin} className="space-y-4">
+              {error && (
                 <Alert variant="destructive">
-                  <AlertDescription>{state.error}</AlertDescription>
+                  <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
               <div className="space-y-2">
@@ -65,8 +100,8 @@ export function LoginForm() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={state?.success}>
-                {state?.success ? 'Signing in...' : 'Sign In'}
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>
           </TabsContent>

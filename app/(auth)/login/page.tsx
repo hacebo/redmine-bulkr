@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation';
-import { getServerUser } from '@/lib/services/auth';
+import { getUserFromCookie } from '@/lib/auth.server';
 import { LoginForm } from '@/components/forms/login-form';
 
 export default async function LoginPage() {
-  const user = await getServerUser();
+  const user = await getUserFromCookie();
   
   if (user) {
     redirect('/time-tracking');

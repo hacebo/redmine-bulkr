@@ -1,8 +1,8 @@
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { getServerUser } from '@/lib/services/auth';
-import { getProjects, getActivities } from '@/app/lib/actions/projects';
-import { getMonthlyTimeEntries } from '@/app/lib/actions/time-entries';
+import { requireUserForPage } from '@/lib/auth.server';
+import { getProjectsServerOnly, getActivitiesServerOnly } from '@/app/lib/actions/projects';
+import { getMonthlyTimeEntriesServerOnly } from '@/app/lib/actions/time-entries';
 import { BulkEntryClient } from '@/components/time-entry/bulk-entry-client';
 import { DashboardLoadingSkeleton } from '@/components/shared/loading-skeletons';
 import { format, startOfWeek, addDays } from 'date-fns';
@@ -15,9 +15,9 @@ interface BulkEntryPageProps {
 }
 
 export default async function BulkEntryPage({ searchParams }: BulkEntryPageProps) {
-  const user = await getServerUser();
-  
-  if (!user) {
+  try {
+    await requireUserForPage();
+  } catch {
     redirect('/login');
   }
 
@@ -34,9 +34,9 @@ export default async function BulkEntryPage({ searchParams }: BulkEntryPageProps
   const weekEndStr = format(weekEnd, 'yyyy-MM-dd');
 
   const dataPromise = Promise.all([
-    getProjects(),
-    getActivities(),
-    getMonthlyTimeEntries(weekStartStr, weekEndStr).catch(() => [])
+    getProjectsServerOnly(),
+    getActivitiesServerOnly(),
+    getMonthlyTimeEntriesServerOnly(weekStartStr, weekEndStr).catch(() => [])
   ]).then(([projects, activities, timeEntries]) => {
     const selectedProject = params.projectId
       ? projects.find(p => p.id === parseInt(params.projectId || '0'))

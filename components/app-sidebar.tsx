@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { logoutAction } from "@/lib/actions/logout";
 
@@ -51,11 +51,30 @@ const navItems = [
 
 export function AppSidebar({ user }: { user: { email: string; name?: string | null } }) {
   const pathname = usePathname();
+  const router = useRouter();
 
   async function handleLogout() {
     try {
-      await logoutAction();
-      toast.success("Signed out successfully");
+      // Clear Appwrite sessions (cross-domain)
+      const { Client, Account } = await import("appwrite");
+      const c = new Client()
+        .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
+        .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!);
+      const acc = new Account(c);
+      
+      try {
+        await acc.deleteSessions();
+      } catch {
+        // Ignore errors - session might already be cleared
+      }
+
+      // Clear our app cookie
+      const result = await logoutAction();
+      if (result.success) {
+        toast.success("Signed out successfully");
+        router.push("/login");
+        router.refresh();
+      }
     } catch (error) {
       console.error("Logout error:", error);
       toast.error("Error signing out");

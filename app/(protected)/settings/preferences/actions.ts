@@ -1,27 +1,52 @@
-'use server';
-
-import { getServerUser } from '@/lib/services/auth';
-import { createSessionClient } from '@/lib/appwrite';
-import { revalidatePath } from 'next/cache';
+"use server";
+import { revalidatePath } from "next/cache";
+import { Client, Account } from "appwrite";
+import { requireUserForServer } from "@/lib/auth.server";
 
 export interface TimeEntryPreferences {
   requireIssue: boolean;
 }
 
-export async function getTimeEntryPreferences(): Promise<TimeEntryPreferences> {
-  const user = await getServerUser();
-  if (!user) {
-    throw new Error('User not authenticated');
-  }
+export async function updatePrefsWithJWT(jwt: string, prefs: { requireIssue: boolean }) {
+  const me = await requireUserForServer();
 
-  // Default preferences
+  const c = new Client()
+    .setEndpoint(process.env.APPWRITE_ENDPOINT!)
+    .setProject(process.env.APPWRITE_PROJECT_ID!)
+    .setJWT(jwt);
+  const acc = new Account(c);
+
+  const appwriteUser = await acc.get();
+  if (appwriteUser.$id !== me.userId) throw new Error("token/user mismatch");
+
+  await acc.updatePrefs(prefs);
+  revalidatePath("/settings/preferences");
+  return { ok: true };
+}
+
+/**
+ * Get user preferences (requires JWT to read from Appwrite user account)
+ * Note: This must be called from client context that can provide JWT
+ */
+export async function getTimeEntryPreferencesWithJWT(jwt: string): Promise<TimeEntryPreferences> {
   const defaults: TimeEntryPreferences = {
-    requireIssue: true,  // Enabled by default - issues required
+    requireIssue: true,
   };
 
   try {
-    // Get preferences from user.prefs
-    const requireIssue = user.prefs?.requireIssue;
+    const me = await requireUserForServer();
+
+    const c = new Client()
+      .setEndpoint(process.env.APPWRITE_ENDPOINT!)
+      .setProject(process.env.APPWRITE_PROJECT_ID!)
+      .setJWT(jwt);
+    const acc = new Account(c);
+
+    const appwriteUser = await acc.get();
+    if (appwriteUser.$id !== me.userId) throw new Error("token/user mismatch");
+
+    // Get preferences from Appwrite user account
+    const requireIssue = appwriteUser.prefs?.requireIssue;
     
     return {
       requireIssue: typeof requireIssue === 'boolean' ? requireIssue : defaults.requireIssue,
@@ -29,39 +54,6 @@ export async function getTimeEntryPreferences(): Promise<TimeEntryPreferences> {
   } catch (error) {
     console.error('Error getting preferences:', error);
     return defaults;
-  }
-}
-
-export async function updateTimeEntryPreferences(preferences: TimeEntryPreferences) {
-  try {
-    const user = await getServerUser();
-    if (!user) {
-      return {
-        success: false,
-        error: 'User not authenticated'
-      };
-    }
-
-    const { account } = await createSessionClient();
-    
-    // Update user preferences in Appwrite
-    await account.updatePrefs({
-      ...user.prefs,
-      requireIssue: preferences.requireIssue,
-    });
-
-    revalidatePath('/settings/preferences');
-    
-    return {
-      success: true,
-      message: 'Preferences saved successfully!'
-    };
-  } catch (error) {
-    console.error('Error updating preferences:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to save preferences'
-    };
   }
 }
 

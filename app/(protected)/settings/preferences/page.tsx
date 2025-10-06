@@ -1,4 +1,3 @@
-import { getTimeEntryPreferences } from './actions';
 import {
   Card,
   CardContent,
@@ -9,8 +8,6 @@ import {
 import { TimeEntryPreferencesForm } from '@/components/forms/time-entry-preferences-form';
 
 export default async function PreferencesPage() {
-  const preferences = await getTimeEntryPreferences();
-
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold mb-6">Time Entry Preferences</h1>
@@ -23,7 +20,7 @@ export default async function PreferencesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <TimeEntryPreferencesForm initialPreferences={preferences} />
+          <TimeEntryPreferencesForm />
         </CardContent>
       </Card>
     </div>

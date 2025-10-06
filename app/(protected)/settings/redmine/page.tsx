@@ -1,4 +1,4 @@
-import { getRedmineCredentials } from "@/lib/services/redmine-credentials";
+import { getRedmineCredentialsServer } from "@/lib/services/redmine-credentials-server";
 import {
   Card,
   CardContent,
@@ -12,7 +12,7 @@ import { TestConnectionForm } from "@/components/forms/test-connection-form";
 import { SaveCredentialsForm } from "@/components/forms/save-credentials-form";
 
 export default async function RedmineSettingsPage() {
-  const currentConfig = await getRedmineCredentials();
+  const currentConfig = await getRedmineCredentialsServer();
 
   return (
     <div className="max-w-2xl">

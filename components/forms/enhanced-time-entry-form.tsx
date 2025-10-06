@@ -25,7 +25,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { createBulkTimeEntries } from '@/app/lib/actions/time-entries';
 import { getProjectIssues } from '@/app/lib/actions/projects';
-import { getTimeEntryPreferences } from '@/app/(protected)/settings/preferences/actions';
+import { getTimeEntryPreferencesWithJWT } from '@/app/(protected)/settings/preferences/actions';
+import { getAppwriteJWT } from '@/lib/appwrite-jwt.client';
 import { toast } from 'sonner';
 import { validateTimeEntries } from '@/app/lib/utils/time-entry-validations';
 
@@ -112,7 +113,8 @@ export function EnhancedTimeEntryForm({
       
       // Load preferences
       try {
-        const prefs = await getTimeEntryPreferences();
+        const jwt = await getAppwriteJWT();
+        const prefs = await getTimeEntryPreferencesWithJWT(jwt);
         setRequireIssue(prefs.requireIssue);
       } catch (error) {
         console.error('Error loading preferences:', error);

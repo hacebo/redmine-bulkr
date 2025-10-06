@@ -1,7 +1,7 @@
 'use server';
 
-import { getServerUser } from '@/lib/services/auth';
-import { getDecryptedRedmineCredentials } from '@/lib/services/redmine-credentials';
+import { requireUserForServer } from '@/lib/auth.server';
+import { getDecryptedRedmineCredentialsServer } from '@/lib/services/redmine-credentials-server';
 import { RedmineService } from '../services/redmine';
 import { RedmineApiError } from '../types';
 import { createUserScopedCache } from '../cache';
@@ -19,12 +19,9 @@ export async function createCachedRedmineCall<T>(
   }
 ): Promise<T> {
   // 1. Get user and credentials (happens OUTSIDE cache)
-  const user = await getServerUser();
-  if (!user) {
-    throw new Error('User not authenticated');
-  }
+  const user = await requireUserForServer();
 
-  const credentials = await getDecryptedRedmineCredentials();
+  const credentials = await getDecryptedRedmineCredentialsServer();
   if (!credentials) {
     throw new Error('No Redmine credentials found');
   }
@@ -43,7 +40,7 @@ export async function createCachedRedmineCall<T>(
     const getCached = createUserScopedCache(
       fetchRaw,
       cacheKey,
-      { userId: user.$id, baseUrl },
+      { userId: user.userId, baseUrl },
       options
     );
 

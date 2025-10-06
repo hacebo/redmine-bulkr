@@ -214,7 +214,7 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 ```
 Error: User (role: guests) missing scopes (["account"])
 ```
-**Solution**: Ensure you're using `getServerUser()` in server components, not `getCurrentUser()`
+**Solution**: Ensure you're using `requireUserForServer()` in server actions and `requireUserForPage()` in server components
 
 #### 2. Magic Link Not Working
 ```

@@ -1,7 +1,8 @@
 'use server';
 
-import { createSessionClient, APPWRITE_DATABASE_ID, REDMINE_CREDENTIALS_COLLECTION_ID } from '@/lib/appwrite';
-import { getServerUser } from '@/lib/services/auth';
+import { createAuthenticatedClient, APPWRITE_DATABASE_ID, REDMINE_CREDENTIALS_COLLECTION_ID } from '@/lib/appwrite';
+import { requireUserForServer } from '@/lib/auth.server';
+import { Client, Account } from 'appwrite';
 import { encryptToGcm, decryptFromGcm } from '@/lib/crypto';
 import { ID, Query, Permission, Role } from 'appwrite';
 import { RedmineService } from '@/app/lib/services/redmine';
@@ -23,12 +24,9 @@ export interface RedmineCredentialsInput {
   apiKey: string;
 }
 
-export async function saveRedmineCredentials(credentials: RedmineCredentialsInput) {
+export async function saveRedmineCredentials(credentials: RedmineCredentialsInput, jwt: string) {
   try {
-    const user = await getServerUser();
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
+    const user = await requireUserForServer();
 
     // Encrypt the API key
     const { encB64, ivB64, tagB64 } = encryptToGcm(credentials.apiKey);
@@ -39,7 +37,7 @@ export async function saveRedmineCredentials(credentials: RedmineCredentialsInpu
     const redmineUserId = currentUser.user.id.toString();
 
     const credentialsData: Omit<RedmineCredentials, '$id' | 'createdAt' | 'updatedAt'> = {
-      userId: user.$id,
+      userId: user.userId,
       baseUrl: credentials.baseUrl,
       apiKeyEnc: encB64,
       iv: ivB64,
@@ -48,8 +46,8 @@ export async function saveRedmineCredentials(credentials: RedmineCredentialsInpu
     };
 
     // Check if credentials already exist for this user
-    const existingCredentials = await getRedmineCredentials();
-    const { databases } = await createSessionClient();
+    const existingCredentials = await getRedmineCredentials(jwt);
+    const { databases } = await createAuthenticatedClient(jwt);
     
     if (existingCredentials) {
       // Update existing credentials
@@ -64,9 +62,9 @@ export async function saveRedmineCredentials(credentials: RedmineCredentialsInpu
     } else {
       // Create new credentials with proper permissions
       const permissions = [
-        Permission.read(Role.user(user.$id)),
-        Permission.update(Role.user(user.$id)),
-        Permission.delete(Role.user(user.$id))
+        Permission.read(Role.user(user.userId)),
+        Permission.update(Role.user(user.userId)),
+        Permission.delete(Role.user(user.userId))
       ];
       
       const result = await databases.createDocument(
@@ -89,14 +87,11 @@ export async function saveRedmineCredentials(credentials: RedmineCredentialsInpu
   }
 }
 
-export async function getRedmineCredentials(): Promise<RedmineCredentials | null> {
+export async function getRedmineCredentials(jwt: string): Promise<RedmineCredentials | null> {
   try {
-    const user = await getServerUser();
-    if (!user) {
-      return null;
-    }
+    const user = await requireUserForServer();
 
-    const { databases } = await createSessionClient();
+    const { databases } = await createAuthenticatedClient(jwt);
     
     // Query for user's credentials
     let response;
@@ -104,7 +99,7 @@ export async function getRedmineCredentials(): Promise<RedmineCredentials | null
       response = await databases.listDocuments(
         APPWRITE_DATABASE_ID,
         REDMINE_CREDENTIALS_COLLECTION_ID,
-        [Query.equal("userId", user.$id)]
+        [Query.equal("userId", user.userId)]
       );
     } catch (error: unknown) {
       // If user has no credentials yet, return null instead of throwing
@@ -137,9 +132,9 @@ export async function getRedmineCredentials(): Promise<RedmineCredentials | null
   }
 }
 
-export async function getDecryptedRedmineCredentials() {
+export async function getDecryptedRedmineCredentials(jwt: string) {
   try {
-    const credentials = await getRedmineCredentials();
+    const credentials = await getRedmineCredentials(jwt);
     if (!credentials) {
       return null;
     }
@@ -158,24 +153,51 @@ export async function getDecryptedRedmineCredentials() {
   }
 }
 
-export async function deleteRedmineCredentials() {
+/**
+ * Delete Redmine credentials (using admin client for cross-domain compatibility)
+ * Called by clearAccountDataAction after JWT validation
+ */
+export async function deleteRedmineCredentials(jwt: string) {
   try {
-    const user = await getServerUser();
-    if (!user) {
-      throw new Error('User not authenticated');
+    // Validate JWT and user match
+    const me = await requireUserForServer();
+    
+    const c = new Client()
+      .setEndpoint(process.env.APPWRITE_ENDPOINT!)
+      .setProject(process.env.APPWRITE_PROJECT_ID!)
+      .setJWT(jwt);
+    const acc = new Account(c);
+    
+    const appwriteUser = await acc.get();
+    if (appwriteUser.$id !== me.userId) {
+      return {
+        success: false,
+        error: "token/user mismatch"
+      };
     }
 
-    const credentials = await getRedmineCredentials();
-    if (!credentials || !credentials.$id) {
-      // No credentials to delete, consider it success
+    // Use admin client to delete (cross-domain compatible)
+    const { createAdminClient } = await import('@/lib/appwrite');
+    const { Query: NodeQuery } = await import('node-appwrite');
+    const { databases } = createAdminClient();
+    
+    // Find user's credentials
+    const response = await databases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      REDMINE_CREDENTIALS_COLLECTION_ID,
+      [NodeQuery.equal("userId", me.userId)]
+    );
+
+    if (response.documents.length === 0) {
+      // No credentials to delete
       return { success: true };
     }
 
-    const { databases } = await createSessionClient();
+    // Delete the credentials document
     await databases.deleteDocument(
       APPWRITE_DATABASE_ID,
       REDMINE_CREDENTIALS_COLLECTION_ID,
-      credentials.$id
+      response.documents[0].$id
     );
 
     return { success: true };

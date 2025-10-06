@@ -1,21 +1,29 @@
 "use server";
 
-import { getServerUser } from "@/lib/services/auth";
+import { requireUserForServer } from "@/lib/auth.server";
 import { deleteRedmineCredentials } from "@/lib/services/redmine-credentials";
-import { createSessionClient } from "@/lib/appwrite";
+import { Client, Account } from "appwrite";
 
-export async function clearAccountDataAction() {
+export async function clearAccountDataAction(jwt: string) {
   try {
-    const user = await getServerUser();
-    if (!user) {
-      return { 
-        success: false, 
-        error: "Unauthorized - please log in again" 
+    const me = await requireUserForServer();
+
+    const c = new Client()
+      .setEndpoint(process.env.APPWRITE_ENDPOINT!)
+      .setProject(process.env.APPWRITE_PROJECT_ID!)
+      .setJWT(jwt);
+    const acc = new Account(c);
+
+    const appwriteUser = await acc.get();
+    if (appwriteUser.$id !== me.userId) {
+      return {
+        success: false,
+        error: "token/user mismatch"
       };
     }
 
     // Delete Redmine credentials from Appwrite
-    const credentialsResult = await deleteRedmineCredentials();
+    const credentialsResult = await deleteRedmineCredentials(jwt);
     if (!credentialsResult.success) {
       return {
         success: false,
@@ -23,11 +31,8 @@ export async function clearAccountDataAction() {
       };
     }
 
-    // Delete user session and account from Appwrite
-    const { account } = await createSessionClient();
-    
     // Delete all sessions (logout)
-    await account.deleteSessions();
+    await acc.deleteSessions();
 
     return { 
       success: true, 

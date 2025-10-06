@@ -1,43 +1,47 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { getServerUser } from "@/lib/services/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
 
-export async function middleware(request: NextRequest) {
+const COOKIE_NAME = "app_session";
+const secret = new TextEncoder().encode(process.env.APP_COOKIE_SECRET!);
+
+export async function middleware(req: NextRequest) {
+  const path = req.nextUrl.pathname;
+  
   // Skip middleware for static files and API routes
   if (
-    request.nextUrl.pathname.startsWith('/_next') ||
-    request.nextUrl.pathname.startsWith('/api') ||
-    request.nextUrl.pathname.includes('.')
+    path.startsWith('/_next') ||
+    path.startsWith('/api') ||
+    path.includes('.')
   ) {
     return NextResponse.next();
   }
 
   // Skip auth check for public routes
   if (
-    request.nextUrl.pathname.startsWith("/login") ||
-    request.nextUrl.pathname.startsWith("/auth/callback") ||
-    request.nextUrl.pathname === "/"
+    path.startsWith("/login") ||
+    path.startsWith("/auth/callback") ||
+    path === "/"
   ) {
     return NextResponse.next();
   }
 
-  // Check if user is authenticated
-  const user = await getServerUser();
-  
-  if (!user) {
-    // Clear any invalid session cookie
-    const response = NextResponse.redirect(new URL("/login", request.url));
-    
-    // Delete any Appwrite session cookie
-    const cookies = request.cookies.getAll();
-    const appwriteSessionCookies = cookies.filter(c => c.name.startsWith('a_session_'));
-    appwriteSessionCookies.forEach(cookie => {
-      response.cookies.delete(cookie.name);
-    });
-    
-    return response;
-  }
+  const token = req.cookies.get(COOKIE_NAME)?.value;
+  if (!token) return redirectToLogin(req);
 
-  return NextResponse.next();
+  // Light validity check (signature + exp) at the edge
+  try {
+    await jwtVerify(token, secret);
+    return NextResponse.next();
+  } catch {
+    return redirectToLogin(req);
+  }
+}
+
+function redirectToLogin(req: NextRequest) {
+  const url = req.nextUrl.clone();
+  url.pathname = "/login";
+  url.searchParams.set("next", req.nextUrl.pathname);
+  return NextResponse.redirect(url);
 }
 
 export const config = {

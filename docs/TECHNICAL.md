@@ -39,12 +39,58 @@ redmine-bulkr/
 └── scripts/                     # Build/utility scripts
 ```
 
-## Authentication Flow
+## Authentication Architecture
 
-1. **Magic Link Request**: User enters email → Server sends magic link via Appwrite
-2. **Email Verification**: User clicks link → Redirected to `/auth/callback`
-3. **Session Creation**: Client component completes session in browser
-4. **Protected Access**: Middleware validates session for protected routes
+### Cross-Domain Challenge
+
+Redmine-Bulkr uses Appwrite Cloud (cloud.appwrite.io) with deployment on Vercel (yourapp.vercel.app). This creates a cross-domain cookie challenge:
+- Appwrite session cookies are domain-scoped to cloud.appwrite.io
+- Our application cannot access these cookies server-side (different domain)
+- Standard Appwrite session-based auth doesn't work for SSR or middleware
+
+### Solution: Dual Authentication System
+
+We implement a hybrid authentication model:
+
+1. **Appwrite Sessions** (cloud.appwrite.io domain)
+   - Maintained by Appwrite SDK on client side
+   - Used for creating JWTs and user account operations
+   - Cannot be accessed by our server-side code
+
+2. **Custom App Cookie** (our domain)
+   - JOSE-signed HttpOnly cookie: `app_session`
+   - Created via JWT exchange after Appwrite login
+   - Used by middleware and all server-side auth checks
+
+3. **Admin API Key** (server-side)
+   - Used for database operations in SSR context
+   - Enables reading data without user JWT
+   - All queries are user-scoped via userId field
+
+### Authentication Flow
+
+1. **Login**: User requests magic link via Appwrite
+2. **Callback**: Client establishes Appwrite session (their domain)
+3. **JWT Exchange**: Client creates JWT from Appwrite session
+4. **Cookie Creation**: Server validates JWT and creates our app_session cookie
+5. **Access**: Middleware validates our cookie for protected routes
+
+### Operation Patterns
+
+**User Account Operations** (Appwrite user prefs, sessions):
+- Client gets JWT via getAppwriteJWT()
+- Server validates with double-check pattern
+- Operations run as-the-user via account.updatePrefs(), account.deleteSessions()
+
+**Database Operations** (Redmine credentials):
+- Server uses admin API key for reads/writes
+- All queries filtered by userId from our cookie
+- No cross-domain issues, works in SSR
+
+**Redmine API Operations** (external):
+- Server-only actions
+- Uses stored credentials fetched via admin client
+- No user session required
 
 ## Data Flow
 
@@ -55,47 +101,104 @@ redmine-bulkr/
 3. **Data Fetching**: Direct Redmine API integration (no local database)
 4. **Time Entries**: Bulk creation and retrieval from Redmine
 
-### Security
+### Security Model
 
-- **Encryption**: AES-256-GCM for API key storage
-- **Session Management**: HTTP-only cookies via Appwrite
-- **Server-Side**: All sensitive operations on server
-- **Input Validation**: Zod schemas for all user inputs
+**Multi-Layer Security:**
+
+1. **Authentication Layer**
+   - JOSE-signed HttpOnly cookies (HS256)
+   - Middleware validates signature and expiration
+   - 8-hour session expiration (configurable)
+
+2. **Authorization Layer**
+   - requireUserForServer() validates on every operation
+   - User ID extracted from verified cookie payload
+
+3. **Sensitive Operations**
+   - JWT double-check pattern for user account ops
+   - Validates both our cookie AND Appwrite JWT
+   - Enforces user ID match (prevents token swapping)
+
+4. **Data Access**
+   - Admin API key for database operations
+   - All queries user-scoped via userId field
+   - No data leakage between users
+
+5. **Encryption**
+   - AES-256-GCM for Redmine API key storage
+   - Per-credential IV and authentication tag
+   - Server-side decryption only
+
+**Why Admin API Key is Safe:**
+- Used only after user authentication via our cookie
+- All database queries explicitly filter by userId
+- Collection-level permissions in Appwrite
+- No direct user input to query parameters
 
 ## Component Patterns
 
-### Server Components (Default)
+### Server Components (SSR)
 ```typescript
 // app/(protected)/page.tsx
+import { requireUserForPage } from '@/lib/auth.server';
+
 export default async function Page() {
-  const user = await getServerUser();
-  if (!user) redirect('/login');
-  
+  const user = await requireUserForPage();
   return <ServerComponent user={user} />;
 }
 ```
 
-### Client Components (When Needed)
+### Server Actions (Database Operations)
 ```typescript
-'use client';
+'use server';
+import { requireUserForServer } from '@/lib/auth.server';
+import { getDecryptedRedmineCredentialsServer } from '@/lib/services/redmine-credentials-server';
 
-export function InteractiveComponent() {
-  const [state, setState] = useState();
-  
-  return <div>Interactive content</div>;
+export async function someAction() {
+  await requireUserForServer(); // Validate auth
+  const credentials = await getDecryptedRedmineCredentialsServer(); // Admin client
+  // Process with credentials...
+  return { success: true };
 }
 ```
 
-### Server Actions
+### Server Actions (User Account Operations)
 ```typescript
 'use server';
+import { requireUserForServer } from '@/lib/auth.server';
+import { Client, Account } from 'appwrite';
 
-export async function createTimeEntry(formData: FormData) {
-  const user = await getServerUser();
-  if (!user) throw new Error('Unauthorized');
+export async function updateUserPrefs(jwt: string, prefs: object) {
+  // Double-check pattern
+  const me = await requireUserForServer();
   
-  // Process data...
-  return { success: true };
+  const c = new Client()
+    .setEndpoint(process.env.APPWRITE_ENDPOINT!)
+    .setProject(process.env.APPWRITE_PROJECT_ID!)
+    .setJWT(jwt);
+  const acc = new Account(c);
+  
+  const appwriteUser = await acc.get();
+  if (appwriteUser.$id !== me.userId) throw new Error("token/user mismatch");
+  
+  await acc.updatePrefs(prefs);
+  return { ok: true };
+}
+```
+
+### Client Components (Interactive)
+```typescript
+'use client';
+import { getAppwriteJWT } from '@/lib/appwrite-jwt.client';
+import { updateUserPrefs } from './actions';
+
+export function PreferencesForm() {
+  async function handleSubmit(formData: FormData) {
+    const jwt = await getAppwriteJWT();
+    await updateUserPrefs(jwt, { setting: true });
+  }
+  
+  return <form action={handleSubmit}>...</form>;
 }
 ```
 
@@ -112,16 +215,46 @@ class RedmineService {
 ```
 
 ### Appwrite Integration
-```typescript
-// Authentication
-const user = await account.get();
 
-// Database
+**Client-Side (Web SDK):**
+```typescript
+// Client-side operations (browser only)
+import { account } from '@/lib/appwrite';
+import { getAppwriteJWT } from '@/lib/appwrite-jwt.client';
+
+// Create JWT from Appwrite session
+const jwt = await getAppwriteJWT();
+
+// Send magic link
+await account.createMagicURLToken(userId, email, callbackUrl);
+```
+
+**Server-Side (Node SDK with Admin API Key):**
+```typescript
+// Server-side database operations
+import { createAdminClient } from '@/lib/appwrite';
+import { Query } from 'node-appwrite';
+
+const { databases } = createAdminClient();
 const docs = await databases.listDocuments(
-  databaseId, 
-  collectionId, 
-  [Query.equal('userId', user.$id)]
+  databaseId,
+  collectionId,
+  [Query.equal('userId', currentUserId)]
 );
+```
+
+**Server-Side (Web SDK with User JWT):**
+```typescript
+// User account operations (as-the-user)
+import { Client, Account } from 'appwrite';
+
+const c = new Client()
+  .setEndpoint(process.env.APPWRITE_ENDPOINT!)
+  .setProject(process.env.APPWRITE_PROJECT_ID!)
+  .setJWT(jwt);
+const acc = new Account(c);
+
+await acc.updatePrefs(prefs);
 ```
 
 ## Performance Optimizations
@@ -150,7 +283,7 @@ import { redirect } from 'next/navigation';
 import { format } from 'date-fns';
 
 // 3. Internal imports (absolute paths)
-import { getServerUser } from '@/lib/services/auth';
+import { requireUserForServer } from '@/lib/auth.server';
 import { Button } from '@/components/ui/button';
 
 // 4. Relative imports
@@ -170,11 +303,42 @@ try {
 
 ## Deployment
 
+### Required Environment Variables
+
+```bash
+# Appwrite Configuration (Public - Client Side)
+NEXT_PUBLIC_APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1
+NEXT_PUBLIC_APPWRITE_PROJECT_ID=your_project_id
+
+# Appwrite Configuration (Server Side)
+APPWRITE_ENDPOINT=https://cloud.appwrite.io/v1
+APPWRITE_PROJECT_ID=your_project_id
+APPWRITE_API_KEY=your_api_key_here
+
+# Appwrite Database
+APPWRITE_DATABASE_ID=your_database_id
+APPWRITE_COLLECTION_ID=your_credentials_collection_id
+
+# Application
+# Use http://localhost:3000 for development
+NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
+APP_COOKIE_SECRET=your-32-char-secret-here
+
+# Encryption (auto-generated via pnpm generate-keys)
+ENCRYPTION_KEY=your-encryption-key
+```
+
+**Critical Notes:**
+- `APPWRITE_API_KEY`: Required for server-side database operations due to cross-domain limitation
+- `APP_COOKIE_SECRET`: Must be 32+ characters, used for JOSE cookie signing
+- `ENCRYPTION_KEY`: Generated via script, used for AES-256-GCM encryption
+
 ### Environment Setup
-1. **Appwrite Instance**: Deploy or use cloud instance
-2. **Database**: Create database and collections
-3. **Environment Variables**: Configure all required vars
-4. **Domain**: Set up custom domain for production
+1. **Appwrite Instance**: Use Appwrite Cloud or self-hosted
+2. **Database**: Create database and credentials collection
+3. **API Key**: Generate API key with database read/write permissions
+4. **Secrets**: Run `pnpm generate-keys` for encryption keys
+5. **Domain**: Set up custom domain for production
 
 ### Build Process
 ```bash
@@ -209,7 +373,9 @@ pnpm start
 - **Input Sanitization**: All user inputs validated
 
 ### Access Control
-- **Authentication**: Appwrite session-based auth
-- **Authorization**: User-scoped data access
+- **Authentication**: Dual cookie system (app_session + Appwrite sessions)
+- **Authorization**: User-scoped queries on all database operations
 - **Rate Limiting**: Built-in Appwrite protection
-- **CSRF Protection**: SameSite cookie attributes
+- **CSRF Protection**: SameSite=Lax cookie attributes
+- **Token Swapping Prevention**: JWT double-check pattern for sensitive ops
+
