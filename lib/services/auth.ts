@@ -1,34 +1,78 @@
 'use server';
 
-import { account } from '@/lib/appwrite';
+import { account, ID } from '@/lib/appwrite';
+import {
+  checkMagicLinkRateLimit,
+  setMagicLinkCooldown,
+} from '@/lib/services/rate-limit';
+
+export interface SendMagicLinkResult {
+  success: boolean;
+  error?: string;
+  cooldownSeconds?: number;
+  retryAfter?: number;
+}
 
 /**
  * Send magic link for passwordless authentication
  * Called by MagicLinkForm
+ * Enforces rate limiting and cooldowns to prevent abuse
  */
 export async function sendMagicLink(
-  prevState: { success: boolean; error?: string } | null,
+  prevState: SendMagicLinkResult | null,
   formData: FormData
-) {
+): Promise<SendMagicLinkResult> {
   try {
     const email = formData.get('email') as string;
-    
+
     if (!email) {
       return { success: false, error: 'Email is required' };
     }
-    
-    // Generate a valid userId (max 36 chars, alphanumeric + period, hyphen, underscore)
-    const userId = `user${Date.now().toString(36).substring(0, 8)}`;
-    const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`;
-    
+
+    // Check rate limits
+    const rateLimitCheck = await checkMagicLinkRateLimit(email);
+
+    if (!rateLimitCheck.allowed) {
+      if (rateLimitCheck.reason === 'cooldown') {
+        return {
+          success: false,
+          error: `Please wait ${rateLimitCheck.cooldownSeconds} seconds before requesting another magic link`,
+          cooldownSeconds: rateLimitCheck.cooldownSeconds,
+        };
+      }
+
+      if (rateLimitCheck.reason === 'rate_limit') {
+        const minutes = Math.ceil((rateLimitCheck.retryAfter || 3600) / 60);
+        return {
+          success: false,
+          error: `Too many requests. Please try again in ${minutes} minutes`,
+          retryAfter: rateLimitCheck.retryAfter,
+        };
+      }
+    }
+
+    // Generate a unique userId using Appwrite ID generator
+    const userId = ID.unique();
+    const callbackUrl = `${
+      process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    }/auth/callback`;
+
     await account.createMagicURLToken(userId, email, callbackUrl);
-    return { success: true };
+
+    // Set cooldown after successful send
+    await setMagicLinkCooldown(email);
+
+    return {
+      success: true,
+      cooldownSeconds: rateLimitCheck.cooldownSeconds,
+    };
   } catch (error: unknown) {
     console.error('Magic link error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to send magic link';
-    return { 
-      success: false, 
-      error: errorMessage
+    const errorMessage =
+      error instanceof Error ? error.message : 'Failed to send magic link';
+    return {
+      success: false,
+      error: errorMessage,
     };
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Client, Account } from "appwrite";
 import { signAppCookie, clearAppCookie } from "@/lib/auth.server";
+import { clearMagicLinkRateLimit } from "@/lib/services/rate-limit";
 
 export async function POST(req: Request) {
   const auth = req.headers.get("authorization") || "";
@@ -19,6 +20,11 @@ export async function POST(req: Request) {
     user = await acc.get(); // throws if invalid/expired
   } catch {
     return NextResponse.json({ error: "invalid token" }, { status: 401 });
+  }
+
+  // Clear rate limiting counters after successful authentication
+  if (user.email) {
+    await clearMagicLinkRateLimit(user.email);
   }
 
   await signAppCookie({ uid: user.$id, email: user.email });

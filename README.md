@@ -8,6 +8,7 @@ A modern time tracking application for Redmine that enables bulk time entry mana
 - **Weekly Overview**: Visual weekly calendar with time tracking summary
 - **Redmine Integration**: Direct sync with your Redmine instance
 - **Secure Authentication**: Appwrite-powered authentication with magic links
+- **Rate-Limited Magic Links**: Cooldowns and rate limits prevent abuse of email system
 - **Mobile-First Design**: Responsive design optimized for mobile devices
 - **Dark Theme**: Beautiful dark theme by default
 - **Real-time Validation**: Instant feedback on time entries and connections
@@ -19,6 +20,7 @@ A modern time tracking application for Redmine that enables bulk time entry mana
 - **Styling**: Tailwind CSS with ShadCN UI
 - **Authentication**: Appwrite
 - **Database**: Appwrite Databases
+- **Rate Limiting**: Vercel KV (Upstash Redis)
 - **Encryption**: AES-256-GCM for secure credential storage
 - **API Integration**: Redmine REST API
 
@@ -89,13 +91,21 @@ CRYPTO_KEY_BASE64=your-encryption-key
 
 # App URL (for magic links)
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Vercel KV (Upstash Redis) - For rate limiting
+KV_REST_API_URL=your-kv-rest-api-url
+KV_REST_API_TOKEN=your-kv-rest-api-token
+REDIS_HASH_SECRET=your-redis-hash-secret
 ```
+
+See [Rate Limiting Documentation](./docs/RATE_LIMITING.md) for detailed setup instructions.
 
 ## 📚 Documentation
 
 For detailed setup and configuration instructions, see the [docs](./docs/) folder:
 
 - [Appwrite Setup](./docs/APPWRITE_SETUP.md) - Complete Appwrite configuration guide
+- [Rate Limiting](./docs/RATE_LIMITING.md) - Magic link rate limiting and cooldown setup
 
 ## 🤝 Contributing
 
