@@ -55,10 +55,13 @@ export async function sendMagicLink(
     // Generate a unique userId using Appwrite ID generator
     const userId = ID.unique();
     
-    // Use Vercel URL if available, then NEXT_PUBLIC_APP_URL, then localhost
-    const baseUrl = process.env.NEXT_PUBLIC_VERCEL_URL 
-      ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-      : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    // Get base URL from environment - required for magic link callbacks
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL 
+      || (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : null);
+    
+    if (!baseUrl) {
+      throw new Error('NEXT_PUBLIC_APP_URL or NEXT_PUBLIC_VERCEL_URL must be set for magic link authentication');
+    }
     
     const callbackUrl = `${baseUrl}/auth/callback`;
 
