@@ -21,6 +21,7 @@ A modern time tracking application for Redmine that enables bulk time entry mana
 - **Authentication**: Appwrite
 - **Database**: Appwrite Databases
 - **Rate Limiting**: Vercel KV (Upstash Redis)
+- **Observability**: Sentry for error tracking and performance monitoring
 - **Encryption**: AES-256-GCM for secure credential storage
 - **API Integration**: Redmine REST API
 
@@ -106,6 +107,8 @@ For detailed setup and configuration instructions, see the [docs](./docs/) folde
 
 - [Appwrite Setup](./docs/APPWRITE_SETUP.md) - Complete Appwrite configuration guide
 - [Rate Limiting](./docs/RATE_LIMITING.md) - Magic link rate limiting and cooldown setup
+- [Sentry Integration](./docs/SENTRY.md) - Error tracking and performance monitoring setup
+- [Deployment Guide](./docs/DEPLOYMENT.md) - Deploy to Vercel or self-hosted
 
 ## 🤝 Contributing
 

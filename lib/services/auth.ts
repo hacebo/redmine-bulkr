@@ -5,6 +5,7 @@ import {
   checkMagicLinkRateLimit,
   setMagicLinkCooldown,
 } from '@/lib/services/rate-limit';
+import { logError } from '@/lib/sentry';
 
 export interface SendMagicLinkResult {
   success: boolean;
@@ -67,7 +68,15 @@ export async function sendMagicLink(
       cooldownSeconds: rateLimitCheck.cooldownSeconds,
     };
   } catch (error: unknown) {
-    console.error('Magic link error:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'auth',
+        errorType: 'magic_link_send_failed',
+      },
+      extra: {
+        email: formData.get('email') as string,
+      },
+    });
     const errorMessage =
       error instanceof Error ? error.message : 'Failed to send magic link';
     return {

@@ -26,6 +26,7 @@ import { useRouter } from 'next/navigation';
 import { validateTimeEntries } from '@/app/lib/utils/time-entry-validations';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useEffect } from 'react';
+import * as Sentry from '@sentry/nextjs';
 
 interface Project {
   id: number;
@@ -125,7 +126,12 @@ export function BulkEntryClient({
         const prefs = await getTimeEntryPreferencesWithJWT(jwt);
         setRequireIssue(prefs.requireIssue);
       } catch (error) {
-        console.error('Error loading preferences:', error);
+        Sentry.captureException(error, {
+          tags: {
+            component: 'bulk-entry-client',
+            errorType: 'load_preferences_failed',
+          },
+        });
       }
       
       // Load issues
@@ -134,7 +140,15 @@ export function BulkEntryClient({
         const projectIssues = await getProjectIssues(selectedProject.id);
         setIssues(projectIssues);
       } catch (error) {
-        console.error('Error loading issues:', error);
+        Sentry.captureException(error, {
+          tags: {
+            component: 'bulk-entry-client',
+            errorType: 'load_issues_failed',
+          },
+          extra: {
+            projectId: selectedProject.id,
+          },
+        });
         toast.error('Failed to load issues. You can still create entries without selecting an issue.');
         setIssues([]);
       } finally {
@@ -270,7 +284,15 @@ export function BulkEntryClient({
       setEntries([]);
       router.refresh();
     } catch (error) {
-      console.error('Error submitting entries:', error);
+      Sentry.captureException(error, {
+        tags: {
+          component: 'bulk-entry-client',
+          errorType: 'submit_entries_failed',
+        },
+        extra: {
+          entryCount: bulkEntries?.length || 0,
+        },
+      });
       toast.error('Failed to submit time entries');
     } finally {
       setIsSubmitting(false);

@@ -2,11 +2,15 @@ import { NextResponse } from "next/server";
 import { Client, Account } from "appwrite";
 import { signAppCookie, clearAppCookie } from "@/lib/auth.server";
 import { clearMagicLinkRateLimit } from "@/lib/services/rate-limit";
+import { logError } from "@/lib/sentry";
 
 export async function POST(req: Request) {
   const auth = req.headers.get("authorization") || "";
   const jwt = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (!jwt) return NextResponse.json({ error: "missing token" }, { status: 401 });
+  if (!jwt) {
+    console.warn('Session API: missing JWT in authorization header');
+    return NextResponse.json({ error: "missing token" }, { status: 401 });
+  }
 
   // Validate Appwrite JWT (acts as user)
   const c = new Client()
@@ -18,7 +22,17 @@ export async function POST(req: Request) {
   let user;
   try {
     user = await acc.get(); // throws if invalid/expired
-  } catch {
+  } catch (error) {
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        endpoint: 'auth-session',
+        errorType: 'jwt_validation',
+      },
+      extra: {
+        hasJWT: !!jwt,
+        jwtLength: jwt?.length,
+      },
+    });
     return NextResponse.json({ error: "invalid token" }, { status: 401 });
   }
 

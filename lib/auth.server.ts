@@ -1,6 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { jwtVerify, SignJWT } from "jose";
+import { setUserContext } from "./sentry";
 
 const secret = new TextEncoder().encode(process.env.APP_COOKIE_SECRET!);
 const COOKIE_NAME = "app_session";
@@ -36,12 +37,20 @@ export async function getUserFromCookie() {
 export async function requireUserForPage() {
   const u = await getUserFromCookie();
   if (!u) throw new Error("unauthorized_page"); // pages will redirect in their try/catch
+  
+  // Set user context for Sentry error tracking
+  setUserContext({ id: u.userId, email: u.email });
+  
   return u;
 }
 
 export async function requireUserForServer() {
   const u = await getUserFromCookie();
   if (!u) throw new Error("unauthorized");
+  
+  // Set user context for Sentry error tracking
+  setUserContext({ id: u.userId, email: u.email });
+  
   return u;
 }
 

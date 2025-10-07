@@ -47,3 +47,6 @@ supabase/.branches
 supabase/.temp
 supabase/functions/**/node_modules
 *.local.toml
+
+# Sentry Config File
+.env.sentry-build-plugin

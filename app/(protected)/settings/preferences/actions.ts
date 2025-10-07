@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { Client, Account } from "appwrite";
 import { requireUserForServer } from "@/lib/auth.server";
+import { logError } from "@/lib/sentry";
 
 export interface TimeEntryPreferences {
   requireIssue: boolean;
@@ -52,7 +53,13 @@ export async function getTimeEntryPreferencesWithJWT(jwt: string): Promise<TimeE
       requireIssue: typeof requireIssue === 'boolean' ? requireIssue : defaults.requireIssue,
     };
   } catch (error) {
-    console.error('Error getting preferences:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        action: 'get_preferences',
+        errorType: 'fetch_preferences_failed',
+      },
+      level: 'warning',
+    });
     return defaults;
   }
 }

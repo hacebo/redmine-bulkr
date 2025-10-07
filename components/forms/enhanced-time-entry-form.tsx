@@ -28,6 +28,7 @@ import { getProjectIssues } from '@/app/lib/actions/projects';
 import { getTimeEntryPreferencesWithJWT } from '@/app/(protected)/settings/preferences/actions';
 import { getAppwriteJWT } from '@/lib/appwrite-jwt.client';
 import { toast } from 'sonner';
+import * as Sentry from '@sentry/nextjs';
 import { validateTimeEntries } from '@/app/lib/utils/time-entry-validations';
 
 interface Project {
@@ -117,7 +118,12 @@ export function EnhancedTimeEntryForm({
         const prefs = await getTimeEntryPreferencesWithJWT(jwt);
         setRequireIssue(prefs.requireIssue);
       } catch (error) {
-        console.error('Error loading preferences:', error);
+        Sentry.captureException(error, {
+          tags: {
+            component: 'enhanced-time-entry-form',
+            errorType: 'load_preferences_failed',
+          },
+        });
       }
       
       // Load issues
@@ -126,7 +132,15 @@ export function EnhancedTimeEntryForm({
         const projectIssues = await getProjectIssues(selectedProject.id);
         setIssues(projectIssues);
       } catch (error) {
-        console.error('Error loading issues:', error);
+        Sentry.captureException(error, {
+          tags: {
+            component: 'enhanced-time-entry-form',
+            errorType: 'load_issues_failed',
+          },
+          extra: {
+            projectId: selectedProject.id,
+          },
+        });
         toast.error('Failed to load issues. You can still create entries without selecting an issue.');
         setIssues([]);
       } finally {
@@ -217,7 +231,15 @@ export function EnhancedTimeEntryForm({
         onClose();
       }
     } catch (error) {
-      console.error('Error creating time entries:', error);
+      Sentry.captureException(error, {
+        tags: {
+          component: 'enhanced-time-entry-form',
+          errorType: 'create_entries_failed',
+        },
+        extra: {
+          entryCount: entries.length,
+        },
+      });
       toast.error('Failed to create time entries. Please try again.');
     } finally {
       setIsSubmitting(false);

@@ -1,6 +1,7 @@
 "use server";
 
 import { clearAppCookie } from "@/lib/auth.server";
+import { clearUserContext } from "@/lib/sentry";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -11,6 +12,9 @@ import { revalidatePath } from "next/cache";
 export async function logoutAction() {
     // Clear our app session cookie
     await clearAppCookie();
+    
+    // Clear Sentry user context
+    clearUserContext();
     
     // Revalidate all paths to clear any cached user data
     revalidatePath("/", "layout");

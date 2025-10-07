@@ -4,6 +4,7 @@ import { requireUserForServer } from '@/lib/auth.server';
 import { getRedmineClientForUser, getRedmineUserId } from '../services/redmineClient';
 import { z } from 'zod';
 import { TimeEntry, WeeklyTimeData, RedmineTimeEntry, RedmineApiError, RedmineTimeEntryPayload } from '../types';
+import { logError } from '@/lib/sentry';
 
 const bulkTimeEntrySchema = z.object({
   entries: z.array(z.object({
@@ -80,7 +81,16 @@ export async function createBulkTimeEntries(formData: FormData) {
 
     return { success: true, timeEntries: results };
   } catch (error) {
-    console.error('Error creating bulk time entries:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        action: 'create_bulk_time_entries',
+        errorType: 'bulk_creation_failed',
+      },
+      extra: {
+        userId: user.userId,
+        entryCount: validatedData.entries.length,
+      },
+    });
     
     if (error instanceof RedmineApiError) {
       if (error.code === 'UNAUTHORIZED') {
@@ -143,7 +153,15 @@ export async function getWeeklyTimeEntries(weekStart: string): Promise<WeeklyTim
       byActivity,
     };
   } catch (error) {
-    console.error('Error fetching weekly time entries:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        action: 'get_weekly_time_entries',
+        errorType: 'fetch_failed',
+      },
+      extra: {
+        weekStart,
+      },
+    });
     
     if (error instanceof RedmineApiError) {
       if (error.code === 'UNAUTHORIZED') {
@@ -195,10 +213,15 @@ export async function getMonthlyTimeEntriesServerOnly(monthStart: string, monthE
 
     return entries;
   } catch (error) {
-    console.error('[getMonthlyTimeEntries] Error details:', {
-      error,
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        action: 'get_monthly_time_entries',
+        errorType: 'fetch_failed',
+      },
+      extra: {
+        monthStart,
+        monthEnd,
+      },
     });
     
     if (error instanceof RedmineApiError) {
@@ -246,10 +269,15 @@ export async function getMonthlyTimeEntries(monthStart: string, monthEnd: string
 
     return entries;
   } catch (error) {
-    console.error('[getMonthlyTimeEntries] Error details:', {
-      error,
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        action: 'get_monthly_time_entries',
+        errorType: 'fetch_failed',
+      },
+      extra: {
+        monthStart,
+        monthEnd,
+      },
     });
     
     if (error instanceof RedmineApiError) {

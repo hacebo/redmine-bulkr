@@ -2,6 +2,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { requireUserForServer } from "@/lib/auth.server";
+import { logError } from "@/lib/sentry";
 
 function normalizeUrl(url: string) {
   return url.replace(/\/$/, "");
@@ -44,7 +45,12 @@ export async function saveRedmineCredentialAction(formData: FormData) {
       redirect: "/time-tracking"
     };
   } catch (error: unknown) {
-    console.error("Error saving Redmine credentials:", error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        action: 'save_redmine_credentials',
+        errorType: 'save_failed',
+      },
+    });
     const errorMessage = error instanceof Error ? error.message : "Failed to save credentials";
     return {
       success: false,
@@ -83,7 +89,12 @@ export async function testRedmineConnectionAction() {
       message: `Connection successful! Connected as ${data.user?.firstname || data.user?.login || 'user'}` 
     };
   } catch (error: unknown) {
-    console.error('Test connection error:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        action: 'test_redmine_connection',
+        errorType: 'connection_test_failed',
+      },
+    });
     const errorMessage = error instanceof Error ? error.message : "Connection test failed. Please check your credentials.";
     return { 
       success: false, 

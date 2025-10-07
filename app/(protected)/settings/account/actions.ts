@@ -1,7 +1,8 @@
 "use server";
 
-import { requireUserForServer } from "@/lib/auth.server";
+import { requireUserForServer, clearAppCookie } from "@/lib/auth.server";
 import { deleteRedmineCredentials } from "@/lib/services/redmine-credentials";
+import { clearUserContext, logError } from "@/lib/sentry";
 import { Client, Account } from "appwrite";
 
 export async function clearAccountDataAction(jwt: string) {
@@ -34,12 +35,24 @@ export async function clearAccountDataAction(jwt: string) {
     // Delete all sessions (logout)
     await acc.deleteSessions();
 
+    // Clear our app session cookie
+    await clearAppCookie();
+    
+    // Clear Sentry user context
+    clearUserContext();
+
     return { 
       success: true, 
       message: "All data cleared and logged out successfully." 
     };
   } catch (error: unknown) {
-    console.error("Error clearing account data:", error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        action: 'clear_account_data',
+        errorType: 'account_deletion',
+      },
+    });
+    
     const errorMessage = error instanceof Error ? error.message : "Failed to clear account data. Please try again.";
     return { 
       success: false, 

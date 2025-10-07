@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { MagicLinkForm } from './magic-link-form';
 import { Client, Account } from 'appwrite';
+import * as Sentry from '@sentry/nextjs';
 
 interface LoginFormProps {
   enablePasswordLogin?: boolean;
@@ -55,7 +56,12 @@ export function LoginForm({ enablePasswordLogin = false }: LoginFormProps) {
 
       window.location.href = '/time-tracking';
     } catch (err) {
-      console.error('Login error:', err);
+      Sentry.captureException(err, {
+        tags: {
+          component: 'login-form',
+          errorType: 'email_password_login_failed',
+        },
+      });
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setIsLoading(false);

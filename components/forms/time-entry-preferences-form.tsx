@@ -6,6 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { getAppwriteJWT } from "@/lib/appwrite-jwt.client";
 import { updatePrefsWithJWT, getTimeEntryPreferencesWithJWT } from '@/app/(protected)/settings/preferences/actions';
 import { toast } from 'sonner';
+import * as Sentry from '@sentry/nextjs';
 
 export function TimeEntryPreferencesForm() {
   const [pending, start] = useTransition();
@@ -20,7 +21,12 @@ export function TimeEntryPreferencesForm() {
         const prefs = await getTimeEntryPreferencesWithJWT(jwt);
         setRequireIssue(prefs.requireIssue);
       } catch (error) {
-        console.error('Error loading preferences:', error);
+        Sentry.captureException(error, {
+          tags: {
+            component: 'time-entry-preferences-form',
+            errorType: 'load_preferences_failed',
+          },
+        });
         toast.error('Failed to load preferences');
       } finally {
         setLoading(false);
@@ -36,7 +42,12 @@ export function TimeEntryPreferencesForm() {
         await updatePrefsWithJWT(jwt, prefs);
         toast.success('Preferences saved successfully!');
       } catch (error) {
-        console.error('Error saving preferences:', error);
+        Sentry.captureException(error, {
+          tags: {
+            component: 'time-entry-preferences-form',
+            errorType: 'save_preferences_failed',
+          },
+        });
         toast.error('Failed to save preferences');
       }
     });

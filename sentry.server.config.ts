@@ -1,0 +1,28 @@
+// This file configures the initialization of Sentry on the server.
+// The config you add here will be used whenever the server handles a request.
+// https://docs.sentry.io/platforms/javascript/guides/nextjs/
+
+import * as Sentry from "@sentry/nextjs";
+
+// Parse console log levels from env (default to error only for production)
+const logLevels = (process.env.SENTRY_LOG_LEVELS || "error")
+  .split(",")
+  .map(level => level.trim()) as Array<"log" | "info" | "warn" | "error" | "debug">;
+
+Sentry.init({
+  dsn: "https://f43933de42b9c6a9f5f65efd7ea93fc9@o4510144881557504.ingest.us.sentry.io/4510144882802688",
+
+  // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
+  tracesSampleRate: 1,
+
+  // Capture console logs automatically (configurable via SENTRY_LOG_LEVELS)
+  integrations: [
+    Sentry.consoleLoggingIntegration({ levels: logLevels }),
+  ],
+
+  // Enable logs to be sent to Sentry
+  enableLogs: true,
+
+  // Setting this option to true will print useful information to the console while you're setting up Sentry.
+  debug: false,
+});

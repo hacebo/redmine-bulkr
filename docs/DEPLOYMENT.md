@@ -49,6 +49,14 @@ CRYPTO_KEY_BASE64=your-encryption-key
 
 # App URL (for magic links)
 NEXT_PUBLIC_APP_URL=https://your-domain.com
+
+# Vercel KV (Upstash Redis) - For rate limiting
+KV_REST_API_URL=your-kv-rest-api-url
+KV_REST_API_TOKEN=your-kv-rest-api-token
+REDIS_HASH_SECRET=your-redis-hash-secret
+
+# Sentry - Error tracking (optional but recommended)
+SENTRY_AUTH_TOKEN=your-sentry-auth-token
 ```
 
 ## Deployment Options
@@ -192,9 +200,9 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 ## Monitoring
 
 ### 1. Application Monitoring
+- **Sentry**: Error tracking and performance monitoring (recommended - see [Sentry Setup](./SENTRY.md))
 - **Vercel**: Built-in analytics and performance monitoring
 - **Netlify**: Analytics and form submissions
-- **Self-hosted**: Consider Sentry for error tracking
 
 ### 2. Appwrite Monitoring
 - Monitor API usage in Appwrite Dashboard
@@ -205,6 +213,12 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 - Monitor API response times
 - Check for rate limiting
 - Verify data synchronization
+
+### 4. Sentry Dashboard
+- Track error rates and trends
+- Monitor performance metrics
+- View user-impacted issues
+- Set up alerts for critical errors
 
 ## Troubleshooting
 

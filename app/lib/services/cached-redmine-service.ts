@@ -5,6 +5,7 @@ import { getDecryptedRedmineCredentialsServer } from '@/lib/services/redmine-cre
 import { RedmineService } from '../services/redmine';
 import { RedmineApiError } from '../types';
 import { createUserScopedCache } from '../cache';
+import { logError } from '@/lib/sentry';
 
 /**
  * Helper to create cached Redmine API calls
@@ -46,7 +47,17 @@ export async function createCachedRedmineCall<T>(
 
     return await getCached();
   } catch (error) {
-    console.error(`Error in cached Redmine call (${cacheKey}):`, error);
+    // Log to Sentry with context
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        cacheKey,
+        userId: user.userId,
+        errorType: 'cached_redmine_call',
+      },
+      extra: {
+        baseUrl,
+      },
+    });
     
     // 4. Handle Redmine-specific errors
     if (error instanceof RedmineApiError) {

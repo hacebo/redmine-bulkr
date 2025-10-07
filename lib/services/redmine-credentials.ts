@@ -6,6 +6,7 @@ import { Client, Account } from 'appwrite';
 import { encryptToGcm, decryptFromGcm } from '@/lib/crypto';
 import { ID, Query, Permission, Role } from 'appwrite';
 import { RedmineService } from '@/app/lib/services/redmine';
+import { logError } from '@/lib/sentry';
 
 export interface RedmineCredentials {
   $id?: string;
@@ -78,7 +79,12 @@ export async function saveRedmineCredentials(credentials: RedmineCredentialsInpu
       return { success: true, credentials: result };
     }
   } catch (error: unknown) {
-    console.error('Error saving Redmine credentials:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'redmine-credentials',
+        errorType: 'save_failed',
+      },
+    });
     const errorMessage = error instanceof Error ? error.message : 'Failed to save credentials';
     return { 
       success: false, 
@@ -127,7 +133,13 @@ export async function getRedmineCredentials(jwt: string): Promise<RedmineCredent
       updatedAt: doc.$updatedAt,
     } as RedmineCredentials;
   } catch (error) {
-    console.error('Error getting Redmine credentials:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'redmine-credentials',
+        errorType: 'get_failed',
+      },
+      level: 'warning',
+    });
     return null;
   }
 }
@@ -148,7 +160,12 @@ export async function getDecryptedRedmineCredentials(jwt: string) {
       redmineUserId: credentials.redmineUserId,
     };
   } catch (error) {
-    console.error('Error decrypting Redmine credentials:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'redmine-credentials',
+        errorType: 'decrypt_failed',
+      },
+    });
     return null;
   }
 }
@@ -202,7 +219,12 @@ export async function deleteRedmineCredentials(jwt: string) {
 
     return { success: true };
   } catch (error: unknown) {
-    console.error('Error deleting Redmine credentials:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'redmine-credentials',
+        errorType: 'delete_failed',
+      },
+    });
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete credentials';
     return { 
       success: false, 
@@ -232,7 +254,12 @@ export async function validateRedmineCredentials(baseUrl: string, apiKey: string
       message: 'Credentials validated successfully' 
     };
   } catch (error: unknown) {
-    console.error('Error validating Redmine credentials:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'redmine-credentials',
+        errorType: 'validation_failed',
+      },
+    });
     const errorMessage = error instanceof Error ? error.message : 'Failed to validate credentials';
     return { 
       success: false, 

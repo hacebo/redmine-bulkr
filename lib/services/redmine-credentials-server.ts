@@ -5,6 +5,7 @@ import { createAdminClient, APPWRITE_DATABASE_ID, REDMINE_CREDENTIALS_COLLECTION
 import { encryptToGcm, decryptFromGcm } from '@/lib/crypto';
 import { ID, Query } from 'node-appwrite';
 import { RedmineService } from '@/app/lib/services/redmine';
+import { logError } from '@/lib/sentry';
 
 export interface RedmineCredentials {
   $id?: string;
@@ -63,7 +64,13 @@ export async function getRedmineCredentialsServer(): Promise<RedmineCredentials 
     if (error instanceof Error && error.message === 'unauthorized') {
       return null;
     }
-    console.error('Error getting Redmine credentials:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'redmine-credentials-server',
+        errorType: 'get_failed',
+      },
+      level: 'warning',
+    });
     return null;
   }
 }
@@ -93,7 +100,12 @@ export async function getDecryptedRedmineCredentialsServer() {
     if (error instanceof Error && error.message === 'unauthorized') {
       return null;
     }
-    console.error('Error decrypting Redmine credentials:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'redmine-credentials-server',
+        errorType: 'decrypt_failed',
+      },
+    });
     return null;
   }
 }
@@ -152,7 +164,12 @@ export async function saveRedmineCredentialsServer(credentials: RedmineCredentia
       return { success: true, credentials: result };
     }
   } catch (error: unknown) {
-    console.error('Error saving Redmine credentials:', error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'redmine-credentials-server',
+        errorType: 'save_failed',
+      },
+    });
     const errorMessage = error instanceof Error ? error.message : 'Failed to save Redmine credentials. Please try again.';
     return {
       success: false,

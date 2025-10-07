@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { Project, Activity } from '@/app/lib/types';
 import { ErrorBoundary } from '@/components/shared/error-boundary';
 import { getMonthlyTimeEntries } from '@/app/lib/actions/time-entries';
+import * as Sentry from '@sentry/nextjs';
 
 interface DashboardData {
   projects: Project[];
@@ -108,7 +109,17 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
           const entries = await getMonthlyTimeEntries(visibleRangeStart, visibleRangeEnd);
           setAllTimeEntries(entries);
         } catch (error) {
-          console.error('Error loading time entries:', error);
+          Sentry.captureException(error, {
+            tags: {
+              component: 'main-dashboard',
+              errorType: 'load_time_entries_failed',
+            },
+            extra: {
+              visibleRangeStart,
+              visibleRangeEnd,
+              projectId: selectedProject?.id,
+            },
+          });
           const errorMessage = error instanceof Error ? error.message : 'Failed to load time entries';
           toast.error(errorMessage);
           setAllTimeEntries([]);

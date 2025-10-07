@@ -35,6 +35,7 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { logoutAction } from "@/lib/actions/logout";
+import * as Sentry from "@sentry/nextjs";
 
 const navItems = [
   {
@@ -76,7 +77,12 @@ export function AppSidebar({ user }: { user: { email: string; name?: string | nu
         router.refresh();
       }
     } catch (error) {
-      console.error("Logout error:", error);
+      Sentry.captureException(error, {
+        tags: {
+          component: 'app-sidebar',
+          errorType: 'logout_failed',
+        },
+      });
       toast.error("Error signing out");
     }
   }

@@ -1,4 +1,5 @@
 import { RedmineApiError } from '../types';
+import { logError } from '@/lib/sentry';
 
 export class RedmineService {
   private baseUrl: string;
@@ -24,7 +25,20 @@ export class RedmineService {
 
       if (!response.ok) {
         const responseText = await response.text();
-        console.error('[Redmine API] Error:', { endpoint, status: response.status, body: responseText });
+        
+        // Log API errors to Sentry with context
+        logError(new Error(`Redmine API error: ${response.status}`), {
+          tags: {
+            endpoint,
+            status: response.status.toString(),
+            errorType: 'redmine_api',
+          },
+          extra: {
+            responseBody: responseText,
+            url,
+          },
+          level: response.status >= 500 ? 'error' : 'warning',
+        });
         
         if (response.status === 401) {
           throw new RedmineApiError(
@@ -70,7 +84,19 @@ export class RedmineService {
 
       return await response.json();
     } catch (error) {
-      console.error('[Redmine API] Request failed:', { endpoint, error });
+      // Only log unexpected errors (not RedmineApiError which we already logged above)
+      if (!(error instanceof RedmineApiError)) {
+        logError(error instanceof Error ? error : new Error(String(error)), {
+          tags: {
+            endpoint,
+            errorType: 'redmine_request',
+          },
+          extra: {
+            url: `${this.baseUrl}${endpoint}`,
+          },
+        });
+      }
+      
       if (error instanceof RedmineApiError) {
         throw error;
       }

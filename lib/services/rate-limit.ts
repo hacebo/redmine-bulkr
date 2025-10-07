@@ -1,5 +1,6 @@
 import { redis } from "@/lib/redis";
 import crypto from "crypto";
+import { logError } from "@/lib/sentry";
 
 const EMAIL_WINDOW = 60 * 60; // 1 hour in seconds
 const EMAIL_MAX = 3; // Maximum sends per hour
@@ -62,7 +63,15 @@ export async function checkMagicLinkRateLimit(
 
     return { allowed: true, cooldownSeconds: EMAIL_COOLDOWN };
   } catch (error) {
-    console.error("Rate limit check error:", error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'rate-limit',
+        errorType: 'check_failed',
+      },
+      extra: {
+        email: hashEmail(email),
+      },
+    });
     // On error, allow the request to proceed
     // This ensures the service remains available if Redis is down
     return { allowed: true };
@@ -78,7 +87,16 @@ export async function setMagicLinkCooldown(email: string): Promise<void> {
     const cooldownKey = `cd:email:${id}`;
     await redis.set(cooldownKey, "1", { ex: EMAIL_COOLDOWN });
   } catch (error) {
-    console.error("Error setting cooldown:", error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'rate-limit',
+        errorType: 'cooldown_set_failed',
+      },
+      extra: {
+        email: hashEmail(email),
+      },
+      level: 'warning',
+    });
   }
 }
 
@@ -98,7 +116,16 @@ export async function clearMagicLinkRateLimit(email: string): Promise<void> {
       redis.del(rateKey)
     ]);
   } catch (error) {
-    console.error("Error clearing rate limit:", error);
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'rate-limit',
+        errorType: 'clear_failed',
+      },
+      extra: {
+        email: hashEmail(email),
+      },
+      level: 'warning',
+    });
   }
 }
 
