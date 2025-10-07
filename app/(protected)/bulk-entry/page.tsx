@@ -60,8 +60,9 @@ export default async function BulkEntryPage({ searchParams }: BulkEntryPageProps
   });
 
   return (
-    <Suspense fallback={<DashboardLoadingSkeleton />}>
+    <Suspense fallback={<DashboardLoadingSkeleton />} key={weekStartStr}>
       <BulkEntryClient
+        key={weekStartStr}
         dataPromise={dataPromise}
         initialWeekStart={weekStartStr}
       />
