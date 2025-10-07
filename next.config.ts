@@ -2,8 +2,14 @@ import {withSentryConfig} from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Removed serverExternalPackages - let Next.js bundle Sentry's OpenTelemetry deps
-  // This avoids version conflicts between different @opentelemetry packages
+  // Remove them from externalization
+  serverExternalPackages: [],
+  // Or explicitly force bundling of troublemakers
+  transpilePackages: [
+    '@opentelemetry/instrumentation',
+    'require-in-the-middle',
+    'import-in-the-middle',
+  ],
 };
 
 export default withSentryConfig(nextConfig, {

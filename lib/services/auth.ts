@@ -54,9 +54,13 @@ export async function sendMagicLink(
 
     // Generate a unique userId using Appwrite ID generator
     const userId = ID.unique();
-    const callbackUrl = `${
-      process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    }/auth/callback`;
+    
+    // Use Vercel URL if available, then NEXT_PUBLIC_APP_URL, then localhost
+    const baseUrl = process.env.NEXT_PUBLIC_VERCEL_URL 
+      ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+      : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    
+    const callbackUrl = `${baseUrl}/auth/callback`;
 
     await account.createMagicURLToken(userId, email, callbackUrl);
 
