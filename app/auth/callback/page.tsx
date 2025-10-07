@@ -19,6 +19,9 @@ function CallbackContent() {
         
         if (!userId || !secret) {
           console.warn('Auth callback: missing userId or secret params');
+          toast.error("Invalid authentication link. Please try again.");
+          router.replace("/login?err=missing-params");
+          return;
         }
         
         const c = new Client()
@@ -26,31 +29,22 @@ function CallbackContent() {
           .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!);
         const acc = new Account(c);
 
+        // Always process the magic link to ensure it's validated and consumed
         try {
+          await acc.updateMagicURLSession(userId, secret);
           await acc.get();
-        } catch {
-          if (userId && secret) {
-            try {
-              await acc.updateMagicURLSession(userId, secret);
-              await acc.get();
-              console.info('Magic link session created successfully');
-            } catch (sessionError) {
-              console.warn('Magic link session update failed - link expired or invalid');
-              logError(sessionError instanceof Error ? sessionError : new Error(String(sessionError)), {
-                tags: {
-                  flow: 'magic_link_callback',
-                  errorType: 'session_update_failed',
-                },
-              });
-              toast.error("Magic link expired or invalid. Please request a new one.");
-              router.replace("/login?err=expired-link");
-              return;
-            }
-          } else {
-            toast.error("Invalid authentication link. Please try again.");
-            router.replace("/login?err=missing-params");
-            return;
-          }
+          console.info('Magic link session created successfully');
+        } catch (sessionError) {
+          console.warn('Magic link session update failed - link expired or invalid');
+          logError(sessionError instanceof Error ? sessionError : new Error(String(sessionError)), {
+            tags: {
+              flow: 'magic_link_callback',
+              errorType: 'session_update_failed',
+            },
+          });
+          toast.error("Magic link expired or invalid. Please request a new one.");
+          router.replace("/login?err=expired-link");
+          return;
         }
 
         const { jwt } = await acc.createJWT();

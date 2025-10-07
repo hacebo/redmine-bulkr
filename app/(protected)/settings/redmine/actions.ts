@@ -3,6 +3,9 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { requireUserForServer } from "@/lib/auth.server";
 import { logError } from "@/lib/sentry";
+import { Client, Account } from "appwrite";
+import { createAdminClient, APPWRITE_DATABASE_ID, REDMINE_CREDENTIALS_COLLECTION_ID } from "@/lib/appwrite";
+import { Query } from 'node-appwrite';
 
 function normalizeUrl(url: string) {
   return url.replace(/\/$/, "");
@@ -96,6 +99,75 @@ export async function testRedmineConnectionAction() {
       },
     });
     const errorMessage = error instanceof Error ? error.message : "Connection test failed. Please check your credentials.";
+    return { 
+      success: false, 
+      error: errorMessage
+    };
+  }
+}
+
+export async function deleteRedmineCredentialsAction(jwt: string) {
+  try {
+    const me = await requireUserForServer();
+
+    const c = new Client()
+      .setEndpoint(process.env.APPWRITE_ENDPOINT!)
+      .setProject(process.env.APPWRITE_PROJECT_ID!)
+      .setJWT(jwt);
+    const acc = new Account(c);
+
+    const appwriteUser = await acc.get();
+    if (appwriteUser.$id !== me.userId) {
+      return {
+        success: false,
+        error: "token/user mismatch"
+      };
+    }
+
+    // Use admin client to delete (cross-domain compatible)
+    const { databases } = createAdminClient();
+    
+    // Find user's credentials
+    const response = await databases.listDocuments(
+      APPWRITE_DATABASE_ID,
+      REDMINE_CREDENTIALS_COLLECTION_ID,
+      [Query.equal("userId", me.userId)]
+    );
+
+    if (response.documents.length === 0) {
+      return { 
+        success: true,
+        message: "No credentials found to delete"
+      };
+    }
+
+    // Delete the credentials document
+    await databases.deleteDocument(
+      APPWRITE_DATABASE_ID,
+      REDMINE_CREDENTIALS_COLLECTION_ID,
+      response.documents[0].$id
+    );
+
+    // Invalidate all cached data for this user since credentials were deleted
+    revalidateTag(`projects:${me.userId}`);
+    revalidateTag(`activities:${me.userId}`);
+    revalidateTag(`time-entries:${me.userId}`);
+    revalidatePath("/time-tracking");
+    revalidatePath("/bulk-entry");
+
+    return { 
+      success: true, 
+      message: "Redmine credentials deleted successfully" 
+    };
+  } catch (error: unknown) {
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        action: 'delete_redmine_credentials',
+        errorType: 'credentials_deletion',
+      },
+    });
+    
+    const errorMessage = error instanceof Error ? error.message : "Failed to delete credentials. Please try again.";
     return { 
       success: false, 
       error: errorMessage

@@ -79,6 +79,7 @@ export async function getRedmineCredentialsServer(): Promise<RedmineCredentials 
  * Get decrypted Redmine credentials (server-side read)
  * Used by server actions that need to call Redmine API
  * Returns null if user not authenticated or credentials not found
+ * Throws error with specific message if decryption fails (key rotation/corruption)
  */
 export async function getDecryptedRedmineCredentialsServer() {
   try {
@@ -88,25 +89,84 @@ export async function getDecryptedRedmineCredentialsServer() {
     }
 
     // Decrypt the API key
-    const apiKey = decryptFromGcm(credentials.apiKeyEnc, credentials.iv, credentials.tag);
+    try {
+      const apiKey = decryptFromGcm(credentials.apiKeyEnc, credentials.iv, credentials.tag);
 
-    return {
-      baseUrl: credentials.baseUrl,
-      apiKey,
-      redmineUserId: credentials.redmineUserId,
-    };
+      return {
+        baseUrl: credentials.baseUrl,
+        apiKey,
+        redmineUserId: credentials.redmineUserId,
+      };
+    } catch (decryptError) {
+      // Decryption failed - likely due to key rotation or corrupted data
+      // Delete the corrupted credentials so user can re-save them
+      logError(decryptError instanceof Error ? decryptError : new Error(String(decryptError)), {
+        tags: {
+          service: 'redmine-credentials-server',
+          errorType: 'decrypt_failed',
+        },
+        extra: {
+          credentialsId: credentials.$id,
+          reason: 'Key rotation or corrupted data detected',
+        },
+      });
+      
+      // Throw a specific error that can be caught and handled by the UI
+      throw new Error('CREDENTIALS_DECRYPTION_FAILED');
+    }
   } catch (error) {
     // Gracefully handle auth errors during transitions
     if (error instanceof Error && error.message === 'unauthorized') {
       return null;
     }
+    
+    // Re-throw decryption errors so they can be handled by the UI
+    if (error instanceof Error && error.message === 'CREDENTIALS_DECRYPTION_FAILED') {
+      throw error;
+    }
+    
     logError(error instanceof Error ? error : new Error(String(error)), {
       tags: {
         service: 'redmine-credentials-server',
-        errorType: 'decrypt_failed',
+        errorType: 'get_credentials_failed',
       },
     });
     return null;
+  }
+}
+
+/**
+ * Delete corrupted or invalid Redmine credentials
+ * Used when decryption fails due to key rotation or data corruption
+ */
+export async function deleteCorruptedCredentialsServer() {
+  try {
+    const user = await requireUserForServer();
+    const credentials = await getRedmineCredentialsServer();
+    
+    if (!credentials) {
+      return { success: true, message: 'No credentials to delete' };
+    }
+
+    const { databases } = createAdminClient();
+    await databases.deleteDocument(
+      APPWRITE_DATABASE_ID,
+      REDMINE_CREDENTIALS_COLLECTION_ID,
+      credentials.$id!
+    );
+
+    return { success: true, message: 'Corrupted credentials deleted' };
+  } catch (error: unknown) {
+    logError(error instanceof Error ? error : new Error(String(error)), {
+      tags: {
+        service: 'redmine-credentials-server',
+        errorType: 'delete_corrupted_failed',
+      },
+    });
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete credentials'
+    };
   }
 }
 

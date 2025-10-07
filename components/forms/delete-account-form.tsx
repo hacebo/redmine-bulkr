@@ -14,31 +14,30 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { clearAccountDataAction } from '@/app/(protected)/settings/account/actions';
+import { deleteRedmineCredentialsAction } from '@/app/(protected)/settings/redmine/actions';
 import { getAppwriteJWT } from "@/lib/appwrite-jwt.client";
 import { toast } from 'sonner';
 
-export function ClearAccountDataForm() {
+export function DeleteRedmineCredentialsForm() {
   const [pending, start] = useTransition();
   const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
 
-  async function handleClearAccountData() {
+  async function handleDeleteCredentials() {
     const jwt = await getAppwriteJWT();
     start(async () => {
       try {
-        const result = await clearAccountDataAction(jwt);
+        const result = await deleteRedmineCredentialsAction(jwt);
         
         if (result.success) {
-          toast.success(result.message || 'Account data cleared successfully');
-          // Redirect to login immediately after session is deleted
-          router.push('/login');
+          toast.success(result.message || 'Redmine credentials deleted successfully');
+          setIsOpen(false);
           router.refresh();
         } else {
-          toast.error(result.error || 'Failed to clear account data');
+          toast.error(result.error || 'Failed to delete credentials');
         }
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to clear account data';
+        const errorMessage = error instanceof Error ? error.message : 'Failed to delete credentials';
         toast.error(errorMessage);
       }
     });
@@ -53,25 +52,36 @@ export function ClearAccountDataForm() {
           className="w-full"
           disabled={pending}
         >
-          Clear All Data and Logout
+          Delete Redmine Credentials
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This action will permanently delete all your Redmine credentials and log you out. 
-            You will need to set up your Redmine connection again after logging back in.
+          <AlertDialogTitle>Delete Redmine credentials?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              <div className="font-semibold text-foreground">
+                This will permanently delete your stored Redmine credentials:
+              </div>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Your encrypted Redmine API key will be removed</li>
+                <li>Your Redmine URL configuration will be deleted</li>
+                <li>You will need to reconnect to use time tracking features</li>
+              </ul>
+              <div className="pt-2 font-semibold text-green-600 dark:text-green-400">
+                Your Redmine data is safe: All time entries and your Redmine account remain unchanged.
+              </div>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
           <AlertDialogAction
-            onClick={handleClearAccountData}
+            onClick={handleDeleteCredentials}
             disabled={pending}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {pending ? 'Clearing Data...' : 'Yes, clear all data'}
+            {pending ? 'Deleting...' : 'Yes, delete credentials'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
