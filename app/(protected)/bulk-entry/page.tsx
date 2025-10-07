@@ -6,6 +6,7 @@ import { getProjectsServerOnly, getActivitiesServerOnly } from '@/app/lib/action
 import { getMonthlyTimeEntriesServerOnly } from '@/app/lib/actions/time-entries';
 import { BulkEntryClient } from '@/components/time-entry/bulk-entry-client';
 import { DashboardLoadingSkeleton } from '@/components/shared/loading-skeletons';
+import { RedmineSetupEmptyState } from '@/components/shared/redmine-setup-empty-state';
 import { format, startOfWeek, addDays } from 'date-fns';
 
 interface BulkEntryPageProps {
@@ -25,7 +26,8 @@ export default async function BulkEntryPage({ searchParams }: BulkEntryPageProps
   // Check if user has Redmine credentials configured
   const credentials = await getRedmineCredentialsServer();
   if (!credentials) {
-    redirect('/settings/redmine');
+    console.warn('Bulk entry accessed without Redmine credentials - showing setup prompt');
+    return <RedmineSetupEmptyState feature="Bulk Entry" />;
   }
 
   const params = await searchParams;

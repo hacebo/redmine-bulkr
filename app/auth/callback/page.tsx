@@ -4,6 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Client, Account } from "appwrite";
 import { toast } from "sonner";
 import { logError } from "@/lib/sentry";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2 } from "lucide-react";
 
 function CallbackContent() {
   const sp = useSearchParams();
@@ -92,12 +94,41 @@ function CallbackContent() {
     })();
   }, [sp, router]);
 
-  return <p>Signing you in…</p>;
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+          <CardTitle>Signing you in</CardTitle>
+          <CardDescription>
+            Please wait while we verify your authentication
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-center text-sm text-muted-foreground">
+          This should only take a moment...
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 export default function Callback() {
   return (
-    <Suspense fallback={<p>Loading...</p>}>
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+            <CardTitle>Loading</CardTitle>
+            <CardDescription>Initializing authentication...</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    }>
       <CallbackContent />
     </Suspense>
   );

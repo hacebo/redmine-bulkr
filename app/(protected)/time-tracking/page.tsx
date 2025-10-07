@@ -5,6 +5,7 @@ import { Suspense } from 'react';
 import { DashboardLoadingSkeleton } from '@/components/shared/loading-skeletons';
 import { getRedmineCredentialsServer } from '@/lib/services/redmine-credentials-server';
 import { getProjectsServerOnly, getActivitiesServerOnly } from '@/app/lib/actions/projects';
+import { RedmineSetupEmptyState } from '@/components/shared/redmine-setup-empty-state';
 
 interface TimeTrackingPageProps {
   searchParams: Promise<{
@@ -22,7 +23,8 @@ export default async function TimeTrackingPage({ searchParams }: TimeTrackingPag
   // Check if user has Redmine credentials configured
   const credentials = await getRedmineCredentialsServer();
   if (!credentials) {
-    redirect('/settings/redmine');
+    console.warn('Time tracking accessed without Redmine credentials - showing setup prompt');
+    return <RedmineSetupEmptyState feature="Time Tracking" />;
   }
 
   const params = await searchParams;
