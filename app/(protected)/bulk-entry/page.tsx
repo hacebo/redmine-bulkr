@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { requireUserForPage } from '@/lib/auth.server';
+import { getRedmineCredentialsServer } from '@/lib/services/redmine-credentials-server';
 import { getProjectsServerOnly, getActivitiesServerOnly } from '@/app/lib/actions/projects';
 import { getMonthlyTimeEntriesServerOnly } from '@/app/lib/actions/time-entries';
 import { BulkEntryClient } from '@/components/time-entry/bulk-entry-client';
@@ -19,6 +20,12 @@ export default async function BulkEntryPage({ searchParams }: BulkEntryPageProps
     await requireUserForPage();
   } catch {
     redirect('/login');
+  }
+
+  // Check if user has Redmine credentials configured
+  const credentials = await getRedmineCredentialsServer();
+  if (!credentials) {
+    redirect('/settings/redmine');
   }
 
   const params = await searchParams;
