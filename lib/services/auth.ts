@@ -5,7 +5,7 @@ import {
   checkMagicLinkRateLimit,
   setMagicLinkCooldown,
 } from '@/lib/services/rate-limit';
-import { logError } from '@/lib/sentry';
+import { logError, addBreadcrumb } from '@/lib/sentry';
 
 export interface SendMagicLinkResult {
   success: boolean;
@@ -27,14 +27,21 @@ export async function sendMagicLink(
     const email = formData.get('email') as string;
 
     if (!email) {
+      addBreadcrumb('Magic link request missing email', {}, 'warning');
       return { success: false, error: 'Email is required' };
     }
+
+    addBreadcrumb('Magic link requested', { email }, 'info');
 
     // Check rate limits
     const rateLimitCheck = await checkMagicLinkRateLimit(email);
 
     if (!rateLimitCheck.allowed) {
       if (rateLimitCheck.reason === 'cooldown') {
+        addBreadcrumb('Magic link blocked by cooldown', { 
+          email,
+          cooldownSeconds: rateLimitCheck.cooldownSeconds 
+        }, 'info');
         return {
           success: false,
           error: `Please wait ${rateLimitCheck.cooldownSeconds} seconds before requesting another magic link`,
@@ -43,6 +50,10 @@ export async function sendMagicLink(
       }
 
       if (rateLimitCheck.reason === 'rate_limit') {
+        addBreadcrumb('Magic link blocked by rate limit', { 
+          email,
+          retryAfter: rateLimitCheck.retryAfter 
+        }, 'warning');
         const minutes = Math.ceil((rateLimitCheck.retryAfter || 3600) / 60);
         return {
           success: false,
@@ -70,18 +81,25 @@ export async function sendMagicLink(
     // Set cooldown after successful send
     await setMagicLinkCooldown(email);
 
+    addBreadcrumb('Magic link sent successfully', { 
+      email,
+      userId 
+    }, 'info');
+
     return {
       success: true,
       cooldownSeconds: rateLimitCheck.cooldownSeconds,
     };
   } catch (error: unknown) {
     logError(error instanceof Error ? error : new Error(String(error)), {
+      level: 'error',
       tags: {
         service: 'auth',
         errorType: 'magic_link_send_failed',
       },
       extra: {
         email: formData.get('email') as string,
+        errorMessage: error instanceof Error ? error.message : String(error),
       },
     });
     const errorMessage =

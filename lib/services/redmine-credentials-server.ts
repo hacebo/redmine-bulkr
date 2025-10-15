@@ -5,7 +5,7 @@ import { createAdminClient, APPWRITE_DATABASE_ID, REDMINE_CREDENTIALS_COLLECTION
 import { encryptToGcm, decryptFromGcm } from '@/lib/crypto';
 import { ID, Query } from 'node-appwrite';
 import { RedmineService } from '@/app/lib/services/redmine';
-import { logError } from '@/lib/sentry';
+import { logError, addBreadcrumb } from '@/lib/sentry';
 
 export interface RedmineCredentials {
   $id?: string;
@@ -36,6 +36,8 @@ export async function getRedmineCredentialsServer(): Promise<RedmineCredentials 
     // Use admin client for server-side reads
     const { databases } = createAdminClient();
     
+    addBreadcrumb('Fetching Redmine credentials', { userId: user.userId }, 'info');
+    
     const response = await databases.listDocuments(
       APPWRITE_DATABASE_ID,
       REDMINE_CREDENTIALS_COLLECTION_ID,
@@ -43,10 +45,21 @@ export async function getRedmineCredentialsServer(): Promise<RedmineCredentials 
     );
 
     if (response.documents.length === 0) {
+      addBreadcrumb('No Redmine credentials found', { 
+        userId: user.userId,
+        userEmail: user.email 
+      }, 'info');
       return null;
     }
 
     const doc = response.documents[0];
+    
+    addBreadcrumb('Redmine credentials retrieved', {
+      credentialId: doc.$id,
+      baseUrl: doc.baseUrl,
+      hasEncryptedKey: !!doc.apiKeyEnc,
+    }, 'info');
+    
     return {
       $id: doc.$id,
       userId: doc.userId,
@@ -59,18 +72,27 @@ export async function getRedmineCredentialsServer(): Promise<RedmineCredentials 
       updatedAt: doc.$updatedAt,
     } as RedmineCredentials;
   } catch (error) {
-    // During logout or auth transitions, this might be called without valid auth
-    // Return null gracefully - the layout/middleware will handle redirect
-    if (error instanceof Error && error.message === 'unauthorized') {
-      return null;
+    // Log to Sentry first, then handle specific cases
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isUnauthorized = error instanceof Error && error.message === 'unauthorized';
+    
+    // Only log actual errors to Sentry, not expected auth transitions
+    if (!isUnauthorized) {
+      logError(error instanceof Error ? error : new Error(String(error)), {
+        level: 'warning',
+        tags: {
+          service: 'redmine-credentials-server',
+          errorType: 'get_failed',
+        },
+        extra: {
+          errorMessage,
+        },
+      });
+    } else {
+      // Expected during logout - just add breadcrumb for context
+      addBreadcrumb('Unauthorized access to credentials', { errorMessage }, 'info');
     }
-    logError(error instanceof Error ? error : new Error(String(error)), {
-      tags: {
-        service: 'redmine-credentials-server',
-        errorType: 'get_failed',
-      },
-      level: 'warning',
-    });
+    
     return null;
   }
 }
@@ -115,22 +137,33 @@ export async function getDecryptedRedmineCredentialsServer() {
       throw new Error('CREDENTIALS_DECRYPTION_FAILED');
     }
   } catch (error) {
-    // Gracefully handle auth errors during transitions
-    if (error instanceof Error && error.message === 'unauthorized') {
-      return null;
+    // Log to Sentry first, then handle specific cases
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isUnauthorized = error instanceof Error && error.message === 'unauthorized';
+    const isDecryptionFailed = error instanceof Error && error.message === 'CREDENTIALS_DECRYPTION_FAILED';
+    
+    // Only log non-expected errors to Sentry
+    if (!isUnauthorized) {
+      logError(error instanceof Error ? error : new Error(String(error)), {
+        level: isDecryptionFailed ? 'error' : 'warning',
+        tags: {
+          service: 'redmine-credentials-server',
+          errorType: isDecryptionFailed ? 'credentials_decryption_failed' : 'get_credentials_failed',
+        },
+        extra: {
+          errorMessage,
+          willRethrow: isDecryptionFailed,
+        },
+      });
+    } else {
+      addBreadcrumb('Unauthorized access to decrypted credentials', { errorMessage }, 'info');
     }
     
     // Re-throw decryption errors so they can be handled by the UI
-    if (error instanceof Error && error.message === 'CREDENTIALS_DECRYPTION_FAILED') {
+    if (isDecryptionFailed) {
       throw error;
     }
     
-    logError(error instanceof Error ? error : new Error(String(error)), {
-      tags: {
-        service: 'redmine-credentials-server',
-        errorType: 'get_credentials_failed',
-      },
-    });
     return null;
   }
 }
@@ -145,6 +178,7 @@ export async function deleteCorruptedCredentialsServer() {
     const credentials = await getRedmineCredentialsServer();
     
     if (!credentials) {
+      addBreadcrumb('No corrupted credentials to delete', { userId: user.userId }, 'info');
       return { success: true, message: 'No credentials to delete' };
     }
 
@@ -155,12 +189,29 @@ export async function deleteCorruptedCredentialsServer() {
       credentials.$id!
     );
 
+    // This IS an important event - log it as warning
+    logError(new Error('Corrupted credentials deleted'), {
+      level: 'warning',
+      tags: {
+        service: 'redmine-credentials-server',
+        errorType: 'corrupted_credentials_deleted',
+      },
+      extra: {
+        userId: user.userId,
+        credentialId: credentials.$id,
+        baseUrl: credentials.baseUrl,
+      },
+    });
+
     return { success: true, message: 'Corrupted credentials deleted' };
   } catch (error: unknown) {
     logError(error instanceof Error ? error : new Error(String(error)), {
       tags: {
         service: 'redmine-credentials-server',
         errorType: 'delete_corrupted_failed',
+      },
+      extra: {
+        errorMessage: error instanceof Error ? error.message : String(error),
       },
     });
     return {
@@ -178,6 +229,11 @@ export async function deleteCorruptedCredentialsServer() {
 export async function saveRedmineCredentialsServer(credentials: RedmineCredentialsInput) {
   try {
     const user = await requireUserForServer();
+    
+    addBreadcrumb('Saving Redmine credentials', { 
+      userId: user.userId,
+      baseUrl: credentials.baseUrl 
+    }, 'info');
 
     // Encrypt the API key
     const { encB64, ivB64, tagB64 } = encryptToGcm(credentials.apiKey);
@@ -209,6 +265,11 @@ export async function saveRedmineCredentialsServer(credentials: RedmineCredentia
         credentialsData
       );
       
+      addBreadcrumb('Redmine credentials updated', {
+        credentialId: result.$id,
+        baseUrl: credentials.baseUrl,
+      }, 'info');
+      
       return { success: true, credentials: result };
     } else {
       // Create new credentials
@@ -221,13 +282,23 @@ export async function saveRedmineCredentialsServer(credentials: RedmineCredentia
         credentialsData
       );
       
+      addBreadcrumb('Redmine credentials created', {
+        credentialId: result.$id,
+        baseUrl: credentials.baseUrl,
+      }, 'info');
+      
       return { success: true, credentials: result };
     }
   } catch (error: unknown) {
     logError(error instanceof Error ? error : new Error(String(error)), {
+      level: 'error',
       tags: {
         service: 'redmine-credentials-server',
         errorType: 'save_failed',
+      },
+      extra: {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        baseUrl: credentials.baseUrl,
       },
     });
     const errorMessage = error instanceof Error ? error.message : 'Failed to save Redmine credentials. Please try again.';

@@ -6,7 +6,7 @@ import { Client, Account } from 'appwrite';
 import { encryptToGcm, decryptFromGcm } from '@/lib/crypto';
 import { ID, Query, Permission, Role } from 'appwrite';
 import { RedmineService } from '@/app/lib/services/redmine';
-import { logError } from '@/lib/sentry';
+import { logError, addBreadcrumb } from '@/lib/sentry';
 
 export interface RedmineCredentials {
   $id?: string;
@@ -28,6 +28,11 @@ export interface RedmineCredentialsInput {
 export async function saveRedmineCredentials(credentials: RedmineCredentialsInput, jwt: string) {
   try {
     const user = await requireUserForServer();
+    
+    addBreadcrumb('Saving Redmine credentials (client-side)', {
+      userId: user.userId,
+      baseUrl: credentials.baseUrl
+    }, 'info');
 
     // Encrypt the API key
     const { encB64, ivB64, tagB64 } = encryptToGcm(credentials.apiKey);
@@ -59,6 +64,10 @@ export async function saveRedmineCredentials(credentials: RedmineCredentialsInpu
         credentialsData
       );
       
+      addBreadcrumb('Redmine credentials updated (client-side)', {
+        credentialId: result.$id
+      }, 'info');
+      
       return { success: true, credentials: result };
     } else {
       // Create new credentials with proper permissions
@@ -76,13 +85,22 @@ export async function saveRedmineCredentials(credentials: RedmineCredentialsInpu
         permissions
       );
       
+      addBreadcrumb('Redmine credentials created (client-side)', {
+        credentialId: result.$id
+      }, 'info');
+      
       return { success: true, credentials: result };
     }
   } catch (error: unknown) {
     logError(error instanceof Error ? error : new Error(String(error)), {
+      level: 'error',
       tags: {
         service: 'redmine-credentials',
         errorType: 'save_failed',
+      },
+      extra: {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        baseUrl: credentials.baseUrl,
       },
     });
     const errorMessage = error instanceof Error ? error.message : 'Failed to save credentials';
@@ -96,6 +114,10 @@ export async function saveRedmineCredentials(credentials: RedmineCredentialsInpu
 export async function getRedmineCredentials(jwt: string): Promise<RedmineCredentials | null> {
   try {
     const user = await requireUserForServer();
+    
+    addBreadcrumb('Fetching Redmine credentials (client-side)', {
+      userId: user.userId
+    }, 'info');
 
     const { databases } = await createAuthenticatedClient(jwt);
     
@@ -111,16 +133,23 @@ export async function getRedmineCredentials(jwt: string): Promise<RedmineCredent
       // If user has no credentials yet, return null instead of throwing
       if (error && typeof error === 'object' && 'code' in error && 
           (error.code === 401 || error.code === 404)) {
+        addBreadcrumb('No credentials found (401/404)', {}, 'info');
         return null;
       }
       throw error;
     }
 
     if (response.documents.length === 0) {
+      addBreadcrumb('No Redmine credentials found (client-side)', {}, 'info');
       return null;
     }
 
     const doc = response.documents[0];
+    addBreadcrumb('Redmine credentials retrieved (client-side)', {
+      credentialId: doc.$id,
+      baseUrl: doc.baseUrl
+    }, 'info');
+    
     return {
       $id: doc.$id,
       userId: doc.userId,
@@ -139,6 +168,9 @@ export async function getRedmineCredentials(jwt: string): Promise<RedmineCredent
         errorType: 'get_failed',
       },
       level: 'warning',
+      extra: {
+        errorMessage: error instanceof Error ? error.message : String(error),
+      },
     });
     return null;
   }
@@ -154,6 +186,10 @@ export async function getDecryptedRedmineCredentials(jwt: string) {
     // Decrypt the API key
     const apiKey = decryptFromGcm(credentials.apiKeyEnc, credentials.iv, credentials.tag);
 
+    addBreadcrumb('Credentials decrypted successfully (client-side)', {
+      credentialId: credentials.$id
+    }, 'info');
+
     return {
       baseUrl: credentials.baseUrl,
       apiKey,
@@ -161,9 +197,13 @@ export async function getDecryptedRedmineCredentials(jwt: string) {
     };
   } catch (error) {
     logError(error instanceof Error ? error : new Error(String(error)), {
+      level: 'error',
       tags: {
         service: 'redmine-credentials',
         errorType: 'decrypt_failed',
+      },
+      extra: {
+        errorMessage: error instanceof Error ? error.message : String(error),
       },
     });
     return null;
@@ -179,6 +219,10 @@ export async function deleteRedmineCredentials(jwt: string) {
     // Validate JWT and user match
     const me = await requireUserForServer();
     
+    addBreadcrumb('Deleting Redmine credentials (client-side)', {
+      userId: me.userId
+    }, 'info');
+    
     const c = new Client()
       .setEndpoint(process.env.APPWRITE_ENDPOINT!)
       .setProject(process.env.APPWRITE_PROJECT_ID!)
@@ -187,6 +231,7 @@ export async function deleteRedmineCredentials(jwt: string) {
     
     const appwriteUser = await acc.get();
     if (appwriteUser.$id !== me.userId) {
+      addBreadcrumb('Token/user mismatch during delete', {}, 'warning');
       return {
         success: false,
         error: "token/user mismatch"
@@ -206,7 +251,7 @@ export async function deleteRedmineCredentials(jwt: string) {
     );
 
     if (response.documents.length === 0) {
-      // No credentials to delete
+      addBreadcrumb('No credentials to delete (client-side)', {}, 'info');
       return { success: true };
     }
 
@@ -217,12 +262,20 @@ export async function deleteRedmineCredentials(jwt: string) {
       response.documents[0].$id
     );
 
+    addBreadcrumb('Redmine credentials deleted (client-side)', {
+      credentialId: response.documents[0].$id
+    }, 'info');
+
     return { success: true };
   } catch (error: unknown) {
     logError(error instanceof Error ? error : new Error(String(error)), {
+      level: 'error',
       tags: {
         service: 'redmine-credentials',
         errorType: 'delete_failed',
+      },
+      extra: {
+        errorMessage: error instanceof Error ? error.message : String(error),
       },
     });
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete credentials';
@@ -235,6 +288,8 @@ export async function deleteRedmineCredentials(jwt: string) {
 
 export async function validateRedmineCredentials(baseUrl: string, apiKey: string) {
   try {
+    addBreadcrumb('Validating Redmine credentials', { baseUrl }, 'info');
+    
     // Test the credentials by calling Redmine API
     const response = await fetch(`${baseUrl}/my/account.json`, {
       headers: {
@@ -248,6 +303,12 @@ export async function validateRedmineCredentials(baseUrl: string, apiKey: string
     }
 
     const data = await response.json();
+    
+    addBreadcrumb('Redmine credentials validated successfully', {
+      baseUrl,
+      userId: data.user?.id
+    }, 'info');
+    
     return { 
       success: true, 
       user: data.user,
@@ -255,9 +316,14 @@ export async function validateRedmineCredentials(baseUrl: string, apiKey: string
     };
   } catch (error: unknown) {
     logError(error instanceof Error ? error : new Error(String(error)), {
+      level: 'warning',
       tags: {
         service: 'redmine-credentials',
         errorType: 'validation_failed',
+      },
+      extra: {
+        baseUrl,
+        errorMessage: error instanceof Error ? error.message : String(error),
       },
     });
     const errorMessage = error instanceof Error ? error.message : 'Failed to validate credentials';
