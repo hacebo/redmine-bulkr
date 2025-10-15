@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, Suspense } from "react";
+import { useEffect, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Client, Account } from "appwrite";
 import { toast } from "sonner";
@@ -10,15 +10,34 @@ import { Loader2 } from "lucide-react";
 function CallbackContent() {
   const sp = useSearchParams();
   const router = useRouter();
+  const isProcessingRef = useRef(false);
 
   useEffect(() => {
     (async () => {
+      if (isProcessingRef.current) {
+        console.log('Auth callback already processing, skipping duplicate execution');
+        return;
+      }
+      
+      isProcessingRef.current = true;
+      
       try {
         const userId = sp.get("userId");
         const secret = sp.get("secret");
         
         if (!userId || !secret) {
           console.warn('Auth callback: missing userId or secret params');
+          logError(new Error('Auth callback missing params'), {
+            level: 'warning',
+            tags: {
+              flow: 'magic_link_callback',
+              errorType: 'missing_params',
+            },
+            extra: {
+              hasUserId: !!userId,
+              hasSecret: !!secret,
+            },
+          });
           toast.error("Invalid authentication link. Please try again.");
           router.replace("/login?err=missing-params");
           return;
@@ -40,6 +59,10 @@ function CallbackContent() {
             tags: {
               flow: 'magic_link_callback',
               errorType: 'session_update_failed',
+            },
+            extra: {
+              userId,
+              errorMessage: sessionError instanceof Error ? sessionError.message : String(sessionError),
             },
           });
           toast.error("Magic link expired or invalid. Please request a new one.");

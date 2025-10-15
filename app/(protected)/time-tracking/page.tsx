@@ -8,6 +8,7 @@ import { getProjectsServerOnly, getActivitiesServerOnly } from '@/app/lib/action
 import { RedmineSetupEmptyState } from '@/components/shared/redmine-setup-empty-state';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
+import { logError } from '@/lib/sentry';
 
 interface TimeTrackingPageProps {
   searchParams: Promise<{
@@ -50,6 +51,16 @@ export default async function TimeTrackingPage({ searchParams }: TimeTrackingPag
     // Check if it's a decryption error
     if (error instanceof Error && error.message === 'CREDENTIALS_DECRYPTION_FAILED') {
       console.warn('Credentials decryption failed - deleting corrupted data');
+      logError(new Error('Credentials decryption failed in time-tracking page'), {
+        level: 'warning',
+        tags: {
+          page: 'time-tracking',
+          errorType: 'credentials_decryption_failed',
+        },
+        extra: {
+          action: 'deleted_corrupted_credentials',
+        },
+      });
       await deleteCorruptedCredentialsServer();
       
       return (

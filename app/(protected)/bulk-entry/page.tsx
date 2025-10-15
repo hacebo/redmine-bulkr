@@ -10,6 +10,7 @@ import { RedmineSetupEmptyState } from '@/components/shared/redmine-setup-empty-
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
 import { format, startOfWeek, addDays } from 'date-fns';
+import { logError } from '@/lib/sentry';
 
 interface BulkEntryPageProps {
   searchParams: Promise<{
@@ -71,6 +72,16 @@ export default async function BulkEntryPage({ searchParams }: BulkEntryPageProps
     // Check if it's a decryption error
     if (error instanceof Error && error.message === 'CREDENTIALS_DECRYPTION_FAILED') {
       console.warn('Credentials decryption failed - deleting corrupted data');
+      logError(new Error('Credentials decryption failed in bulk-entry page'), {
+        level: 'warning',
+        tags: {
+          page: 'bulk-entry',
+          errorType: 'credentials_decryption_failed',
+        },
+        extra: {
+          action: 'deleted_corrupted_credentials',
+        },
+      });
       await deleteCorruptedCredentialsServer();
       
       return (
