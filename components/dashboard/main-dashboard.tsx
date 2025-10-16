@@ -5,14 +5,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronLeft, ChevronRight, Plus, Calendar, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar, X, Grid, List } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, addDays, addWeeks, isSameDay, isSameMonth } from 'date-fns';
 import { EnhancedTimeEntryForm } from '@/components/forms/enhanced-time-entry-form';
+import { ListView } from '@/components/time-entry/list-view';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Project, Activity } from '@/app/lib/types';
 import { ErrorBoundary } from '@/components/shared/error-boundary';
 import { getMonthlyTimeEntries } from '@/app/lib/actions/time-entries';
+import { getActivityColorClasses } from '@/app/lib/utils/activity-colors';
 import * as Sentry from '@sentry/nextjs';
 
 interface DashboardData {
@@ -54,6 +56,7 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
   const [showTimeEntryForm, setShowTimeEntryForm] = useState(false);
   const [loadingTimeEntries, setLoadingTimeEntries] = useState(false);
   const [showDayDetails, setShowDayDetails] = useState(false);
+  const [currentView, setCurrentView] = useState<'calendar' | 'list'>('calendar');
 
   // Update URL with selected project on mount if no projectId was provided
   const hasInitialProjectId = !!initialProjectId;
@@ -153,34 +156,28 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
     setShowDayDetails(false);
   }, []);
 
+  const handleNavigateWeek = useCallback((direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+    } else {
+      setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+    }
+  }, [currentMonth]);
+
+  const handleProjectChange = useCallback((projectId: number) => {
+    if (projectId === 0) {
+      setSelectedProject(null);
+      router.push('/time-tracking');
+    } else {
+      const project = projects.find(p => p.id === projectId);
+      setSelectedProject(project || null);
+      router.push(`/time-tracking?projectId=${projectId}`);
+    }
+  }, [projects, router]);
+
   // Get activity badge color based on activity name
   const getActivityBadgeColor = (activityName: string) => {
-    const name = activityName.toLowerCase();
-    
-    if (name.includes('vacation') || name.includes('pto') || name.includes('holiday')) {
-      return 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-100 border-blue-200 dark:border-blue-800';
-    }
-    if (name.includes('development') || name.includes('coding')) {
-      return 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-100 border-green-200 dark:border-green-800';
-    }
-    if (name.includes('meeting') || name.includes('call')) {
-      return 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-100 border-purple-200 dark:border-purple-800';
-    }
-    if (name.includes('review') || name.includes('testing')) {
-      return 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-100 border-orange-200 dark:border-orange-800';
-    }
-    if (name.includes('documentation') || name.includes('doc')) {
-      return 'bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-100 border-cyan-200 dark:border-cyan-800';
-    }
-    if (name.includes('design')) {
-      return 'bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-100 border-pink-200 dark:border-pink-800';
-    }
-    if (name.includes('support') || name.includes('bug')) {
-      return 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-100 border-red-200 dark:border-red-800';
-    }
-    
-    // Default
-    return 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 border-gray-200 dark:border-gray-700';
+    return getActivityColorClasses(activityName);
   };
 
   const getDayHours = useCallback((date: Date) => {
@@ -241,10 +238,33 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
 
   return (
     <ErrorBoundary>
-      <div className="max-w-6xl mx-auto p-6 space-y-6">
-        {/* Header with Project Selection */}
+      <div className="max-w-6xl mx-auto p-3 sm:p-6 space-y-6 overflow-hidden">
+        {/* Header with View Toggle and Project Selection */}
         <div className="text-center space-y-4">
+          {/* Main Title */}
           <h1 className="text-3xl font-bold">Time Entry Dashboard</h1>
+          
+          {/* View Toggle */}
+          <div className="flex items-center justify-center gap-2">
+            <Button
+              variant={currentView === 'calendar' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setCurrentView('calendar')}
+              className="h-9"
+            >
+              <Grid className="h-4 w-4 mr-2" />
+              Calendar
+            </Button>
+            <Button
+              variant={currentView === 'list' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setCurrentView('list')}
+              className="h-9"
+            >
+              <List className="h-4 w-4 mr-2" />
+              List
+            </Button>
+          </div>
           
           <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
             <Select value={selectedProject?.id.toString() || ''} onValueChange={(value) => {
@@ -281,22 +301,144 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
           </div>
         </div>
 
-        {/* Dynamic Grid Layout */}
-        <div className={`grid grid-cols-1 gap-6 ${showTimeEntryForm ? 'lg:grid-cols-3' : ''}`}>
-          {/* Monthly Calendar */}
-          <div className={showTimeEntryForm ? 'lg:col-span-2' : ''}>
-            {selectedProject ? (
-              loadingTimeEntries ? (
+        {/* Main Content Area */}
+        {currentView === 'list' ? (
+          <div className="w-full">
+            <ListView
+              timeEntries={allTimeEntries.map(entry => ({
+                id: entry.id.toString(),
+                projectId: entry.projectId,
+                issueId: undefined, // Add if available
+                activityId: entry.activityId,
+                activityName: entry.activityName,
+                date: entry.date,
+                hours: entry.hours,
+                comments: entry.comments,
+                projectName: selectedProject?.name || 'Unknown Project',
+                issueSubject: undefined, // Add if available
+              }))}
+              projects={projects}
+              activities={activities}
+              onNavigateWeek={handleNavigateWeek}
+              currentWeekStart={currentMonth}
+              onProjectChange={handleProjectChange}
+              selectedProjectId={selectedProject?.id}
+            />
+          </div>
+        ) : (
+          <div className={`grid grid-cols-1 gap-6 ${showTimeEntryForm ? 'lg:grid-cols-3' : ''}`}>
+            {/* Monthly Calendar */}
+            <div className={showTimeEntryForm ? 'lg:col-span-2' : ''}>
+              {selectedProject ? (
+                loadingTimeEntries ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Monthly Time View</CardTitle>
+                      <CardDescription>
+                        {format(currentMonth, 'MMMM yyyy')} - {selectedProject.name}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {/* Week headers skeleton */}
+                        <div className="grid grid-cols-7 gap-1">
+                          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+                            <div key={day} className="text-center text-sm font-medium text-muted-foreground p-2">
+                              {day}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Calendar grid skeleton */}
+                        <div className="space-y-2">
+                          {weeks.map((week, weekIndex) => (
+                            <div key={weekIndex} className="grid grid-cols-7 gap-1">
+                              {week.map((day, dayIndex) => {
+                                const isCurrentMonth = isSameMonth(day, currentMonth);
+                                const isToday = isSameDay(day, new Date());
+                                const isSelected = selectedDate && isSameDay(day, selectedDate);
+                                
+                                return (
+                                  <div
+                                    key={dayIndex}
+                                    className={`
+                                      min-h-[60px] p-2 border rounded-lg
+                                      ${isCurrentMonth ? 'bg-background' : 'bg-muted/50'}
+                                      ${isToday ? 'ring-2 ring-primary' : ''}
+                                      ${isSelected ? 'bg-violet-50 dark:bg-violet-950/30 border-violet-500 border-2' : ''}
+                                    `}
+                                  >
+                                    <div className="flex flex-col h-full">
+                                      <div className={`text-sm font-medium ${isSelected ? 'text-violet-700 dark:text-violet-400' : ''}`}>
+                                        {format(day, 'd')}
+                                      </div>
+                                      {isCurrentMonth && (
+                                        <div className="text-xs text-muted-foreground mt-auto">
+                                          <div className="animate-pulse bg-muted h-3 w-8 rounded"></div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Summary skeleton */}
+                        <div className="bg-muted p-4 rounded-lg">
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <div className="font-medium">Total Hours</div>
+                              <div className="animate-pulse bg-muted-foreground/20 h-8 w-16 rounded mt-1"></div>
+                            </div>
+                            <div>
+                              <div className="font-medium">Expected Hours</div>
+                              <div className="animate-pulse bg-muted-foreground/20 h-8 w-16 rounded mt-1"></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Monthly Time View</CardTitle>
-                    <CardDescription>
-                      {format(currentMonth, 'MMMM yyyy')} - {selectedProject.name}
-                    </CardDescription>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Monthly Time View</CardTitle>
+                        <CardDescription>
+                          {format(currentMonth, 'MMMM yyyy')} - {selectedProject.name}
+                        </CardDescription>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentMonth(new Date())}
+                        >
+                          Today
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {/* Week headers skeleton */}
+                      {/* Week headers */}
                       <div className="grid grid-cols-7 gap-1">
                         {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
                           <div key={day} className="text-center text-sm font-medium text-muted-foreground p-2">
@@ -305,12 +447,14 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
                         ))}
                       </div>
 
-                      {/* Calendar grid skeleton */}
+                      {/* Calendar grid */}
                       <div className="space-y-2">
                         {weeks.map((week, weekIndex) => (
                           <div key={weekIndex} className="grid grid-cols-7 gap-1">
                             {week.map((day, dayIndex) => {
                               const isCurrentMonth = isSameMonth(day, currentMonth);
+                              const dayHours = getDayHours(day);
+                              const zeroHourActivityName = getZeroHourEntry(day);
                               const isToday = isSameDay(day, new Date());
                               const isSelected = selectedDate && isSameDay(day, selectedDate);
                               
@@ -318,21 +462,29 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
                                 <div
                                   key={dayIndex}
                                   className={`
-                                    min-h-[60px] p-2 border rounded-lg
+                                    min-h-[60px] p-2 border rounded-lg cursor-pointer transition-colors touch-manipulation
                                     ${isCurrentMonth ? 'bg-background' : 'bg-muted/50'}
                                     ${isToday ? 'ring-2 ring-primary' : ''}
                                     ${isSelected ? 'bg-violet-50 dark:bg-violet-950/30 border-violet-500 border-2' : ''}
+                                    hover:bg-muted active:bg-muted/80
                                   `}
+                                  onClick={() => handleDateClick(day)}
                                 >
                                   <div className="flex flex-col h-full">
                                     <div className={`text-sm font-medium ${isSelected ? 'text-violet-700 dark:text-violet-400' : ''}`}>
                                       {format(day, 'd')}
                                     </div>
-                                    {isCurrentMonth && (
-                                      <div className="text-xs text-muted-foreground mt-auto">
-                                        <div className="animate-pulse bg-muted h-3 w-8 rounded"></div>
-                                      </div>
-                                    )}
+                                    <div className="text-xs text-muted-foreground mt-auto">
+                                      {zeroHourActivityName ? (
+                                        <div className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-100 px-1 py-0.5 rounded text-xs font-medium truncate">
+                                          {zeroHourActivityName}
+                                        </div>
+                                      ) : (
+                                        <span className={dayHours === 0 ? 'text-muted-foreground/50' : ''}>
+                                          {dayHours.toFixed(1)}h
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               );
@@ -341,204 +493,97 @@ export function MainDashboard({ dataPromise, currentMonth: initialMonth, initial
                         ))}
                       </div>
 
-                      {/* Summary skeleton */}
+                      {/* Summary */}
                       <div className="bg-muted p-4 rounded-lg">
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
                             <div className="font-medium">Total Hours</div>
-                            <div className="animate-pulse bg-muted-foreground/20 h-8 w-16 rounded mt-1"></div>
+                            <div className="text-2xl font-bold">{getTotalHoursForMonth().toFixed(1)}h</div>
                           </div>
                           <div>
                             <div className="font-medium">Expected Hours</div>
-                            <div className="animate-pulse bg-muted-foreground/20 h-8 w-16 rounded mt-1"></div>
+                            <div className="text-2xl font-bold">{getExpectedHours()}h</div>
+                          </div>
+                        </div>
+                        <div className="mt-2">
+                          <div className="flex justify-between text-sm">
+                            <span>Progress</span>
+                            <span>{((getTotalHoursForMonth() / getExpectedHours()) * 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+                            <div 
+                              className="bg-primary h-2 rounded-full transition-all"
+                              style={{ width: `${Math.min((getTotalHoursForMonth() / getExpectedHours()) * 100, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Legend */}
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium">Legend:</div>
+                        <div className="flex flex-wrap gap-4 text-xs">
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded border-2 border-primary" />
+                            <span>Today</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded bg-violet-50 dark:bg-violet-950/30 border border-violet-500" />
+                            <span>Selected day</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded bg-blue-100 dark:bg-blue-900 border border-blue-200 dark:border-blue-800" />
+                            <span>Special (0h entries)</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded-full bg-foreground" />
+                            <span>Logged hours</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
+                            <span>No entries (0h)</span>
                           </div>
                         </div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
+                )
               ) : (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Monthly Time View</CardTitle>
-                      <CardDescription>
-                        {format(currentMonth, 'MMMM yyyy')} - {selectedProject.name}
-                      </CardDescription>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Monthly Time View</CardTitle>
+                    <CardDescription>
+                      Select a project to view your time entries
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center py-12">
+                      <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">Choose a project from the dropdown above to get started</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentMonth(new Date())}
-                      >
-                        Today
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {/* Week headers */}
-                    <div className="grid grid-cols-7 gap-1">
-                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-                        <div key={day} className="text-center text-sm font-medium text-muted-foreground p-2">
-                          {day}
-                        </div>
-                      ))}
-                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
 
-                    {/* Calendar grid */}
-                    <div className="space-y-2">
-                      {weeks.map((week, weekIndex) => (
-                        <div key={weekIndex} className="grid grid-cols-7 gap-1">
-                          {week.map((day, dayIndex) => {
-                            const isCurrentMonth = isSameMonth(day, currentMonth);
-                            const dayHours = getDayHours(day);
-                            const zeroHourActivityName = getZeroHourEntry(day);
-                            const isToday = isSameDay(day, new Date());
-                            const isSelected = selectedDate && isSameDay(day, selectedDate);
-                            
-                            return (
-                              <div
-                                key={dayIndex}
-                                className={`
-                                  min-h-[60px] p-2 border rounded-lg cursor-pointer transition-colors touch-manipulation
-                                  ${isCurrentMonth ? 'bg-background' : 'bg-muted/50'}
-                                  ${isToday ? 'ring-2 ring-primary' : ''}
-                                  ${isSelected ? 'bg-violet-50 dark:bg-violet-950/30 border-violet-500 border-2' : ''}
-                                  hover:bg-muted active:bg-muted/80
-                                `}
-                                onClick={() => handleDateClick(day)}
-                              >
-                                <div className="flex flex-col h-full">
-                                  <div className={`text-sm font-medium ${isSelected ? 'text-violet-700 dark:text-violet-400' : ''}`}>
-                                    {format(day, 'd')}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground mt-auto">
-                                    {zeroHourActivityName ? (
-                                      <div className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-100 px-1 py-0.5 rounded text-xs font-medium truncate">
-                                        {zeroHourActivityName}
-                                      </div>
-                                    ) : (
-                                      <span className={dayHours === 0 ? 'text-muted-foreground/50' : ''}>
-                                        {dayHours.toFixed(1)}h
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Summary */}
-                    <div className="bg-muted p-4 rounded-lg">
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <div className="font-medium">Total Hours</div>
-                          <div className="text-2xl font-bold">{getTotalHoursForMonth().toFixed(1)}h</div>
-                        </div>
-                        <div>
-                          <div className="font-medium">Expected Hours</div>
-                          <div className="text-2xl font-bold">{getExpectedHours()}h</div>
-                        </div>
-                      </div>
-                      <div className="mt-2">
-                        <div className="flex justify-between text-sm">
-                          <span>Progress</span>
-                          <span>{((getTotalHoursForMonth() / getExpectedHours()) * 100).toFixed(1)}%</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                          <div 
-                            className="bg-primary h-2 rounded-full transition-all"
-                            style={{ width: `${Math.min((getTotalHoursForMonth() / getExpectedHours()) * 100, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Legend */}
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium">Legend:</div>
-                      <div className="flex flex-wrap gap-4 text-xs">
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 rounded border-2 border-primary" />
-                          <span>Today</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 rounded bg-violet-50 dark:bg-violet-950/30 border border-violet-500" />
-                          <span>Selected day</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 rounded bg-blue-100 dark:bg-blue-900 border border-blue-200 dark:border-blue-800" />
-                          <span>Special (0h entries)</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 rounded-full bg-foreground" />
-                          <span>Logged hours</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
-                          <span>No entries (0h)</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              )
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Monthly Time View</CardTitle>
-                  <CardDescription>
-                    Select a project to view your time entries
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-12">
-                    <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">Choose a project from the dropdown above to get started</p>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Time Entry Form - Right Side */}
+            {showTimeEntryForm && (
+              <div className="lg:col-span-1">
+                <EnhancedTimeEntryForm 
+                  selectedProject={selectedProject!}
+                  activities={activities}
+                  selectedDate={selectedDate || new Date()}
+                  onDateSelect={setSelectedDate}
+                  onClose={() => {
+                    setShowTimeEntryForm(false);
+                    setSelectedDate(null);
+                  }}
+                />
+              </div>
             )}
           </div>
-
-          {/* Time Entry Form - Right Side */}
-          {showTimeEntryForm && (
-            <div className="lg:col-span-1">
-              <EnhancedTimeEntryForm 
-                selectedProject={selectedProject!}
-                activities={activities}
-                selectedDate={selectedDate || new Date()}
-                onDateSelect={setSelectedDate}
-                onClose={() => {
-                  setShowTimeEntryForm(false);
-                  setSelectedDate(null);
-                }}
-              />
-            </div>
-          )}
-        </div>
+        )}
 
 
         {/* Day Details Panel */}
