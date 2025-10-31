@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Plus, Trash2, X } from 'lucide-react';
+import { CalendarIcon, Plus, Trash2, X, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import {
@@ -305,6 +305,7 @@ export function EnhancedTimeEntryForm({
                   size="sm"
                   onClick={() => removeEntry(entry.id)}
                   className="text-destructive hover:text-destructive"
+                  disabled={isSubmitting}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -331,6 +332,7 @@ export function EnhancedTimeEntryForm({
                   <Select
                     value={entry.issueId?.toString() || 'none'}
                     onValueChange={(value) => updateEntry(entry.id, 'issueId', value === 'none' ? undefined : parseInt(value))}
+                    disabled={isSubmitting}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select an issue or leave blank" />
@@ -358,6 +360,7 @@ export function EnhancedTimeEntryForm({
                   <Select
                     value={entry.activityId.toString()}
                     onValueChange={(value) => updateEntry(entry.id, 'activityId', parseInt(value))}
+                    disabled={isSubmitting}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue />
@@ -382,6 +385,7 @@ export function EnhancedTimeEntryForm({
                   step="0.5"
                   value={entry.hours}
                   onChange={(e) => updateEntry(entry.id, 'hours', parseFloat(e.target.value) || 0)}
+                  disabled={isSubmitting}
                 />
               </div>
 
@@ -395,6 +399,7 @@ export function EnhancedTimeEntryForm({
                   value={entry.comments}
                   onChange={(e) => updateEntry(entry.id, 'comments', e.target.value)}
                   required
+                  disabled={isSubmitting}
                 />
               </div>
             </div>
@@ -406,6 +411,7 @@ export function EnhancedTimeEntryForm({
           variant="outline"
           onClick={addEntry}
           className="w-full"
+          disabled={isSubmitting}
         >
           <Plus className="mr-2 h-4 w-4" />
           Add Entry
@@ -434,7 +440,14 @@ export function EnhancedTimeEntryForm({
           disabled={entries.length === 0 || isSubmitting}
           className="w-full"
         >
-          {isSubmitting ? 'Creating...' : 'Create Time Entries'}
+          {isSubmitting ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            'Create Time Entries'
+          )}
         </Button>
       </CardContent>
 

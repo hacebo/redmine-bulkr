@@ -15,7 +15,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ChevronLeft, ChevronRight, Plus, Trash2, ArrowLeft } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, ArrowLeft, Loader2 } from 'lucide-react';
+import { SubmissionLoader } from '@/components/shared/submission-loader';
 import { format, addDays, parse } from 'date-fns';
 import { createBulkTimeEntries } from '@/app/lib/actions/time-entries';
 import { getProjectIssues } from '@/app/lib/actions/projects';
@@ -321,7 +322,9 @@ export function BulkEntryClient({
   // Mobile View - Completely different UI
   if (isMobile) {
     return (
-      <div className="w-full min-h-screen pb-20">
+      <>
+        <SubmissionLoader isSubmitting={isSubmitting} />
+        <div className="w-full min-h-screen pb-20">
         <div className="p-3 space-y-3">
           {/* Mobile Header */}
           <Button variant="ghost" size="sm" onClick={handleBack} className="h-9 px-2 -ml-2">
@@ -338,6 +341,7 @@ export function BulkEntryClient({
                   size="sm"
                   onClick={() => navigateWeek('prev')}
                   className="h-9 w-9 p-0 shrink-0"
+                  disabled={isSubmitting}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -351,6 +355,7 @@ export function BulkEntryClient({
                   size="sm"
                   onClick={() => navigateWeek('next')}
                   className="h-9 w-9 p-0 shrink-0"
+                  disabled={isSubmitting}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -362,6 +367,7 @@ export function BulkEntryClient({
                 onValueChange={(value) => {
                   router.push(`/bulk-entry?projectId=${value}&weekStart=${currentWeekStart}`);
                 }}
+                disabled={isSubmitting}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
@@ -382,7 +388,7 @@ export function BulkEntryClient({
             <Card>
               <CardContent className="p-6 text-center text-muted-foreground">
                 <p>No entries yet</p>
-                <Button onClick={addEntry} variant="outline" className="mt-4">
+                <Button onClick={addEntry} variant="outline" className="mt-4" disabled={isSubmitting}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add First Entry
                 </Button>
@@ -399,12 +405,14 @@ export function BulkEntryClient({
                       size="sm"
                       onClick={() => removeEntry(entry.id)}
                       className="text-destructive h-10 w-10 p-0 shrink-0"
+                      disabled={isSubmitting}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                     <Select
                       value={entry.activityId.toString()}
                       onValueChange={(value) => updateEntry(entry.id, 'activityId', parseInt(value))}
+                      disabled={isSubmitting}
                     >
                       <SelectTrigger className="flex-1">
                         <SelectValue />
@@ -428,6 +436,7 @@ export function BulkEntryClient({
                     <Select
                       value={entry.issueId?.toString() || 'none'}
                       onValueChange={(value) => updateEntry(entry.id, 'issueId', value === 'none' ? undefined : parseInt(value))}
+                      disabled={isSubmitting}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder={requireIssue ? "Issue (required)" : "Issue (optional)"} />
@@ -448,6 +457,7 @@ export function BulkEntryClient({
                     value={entry.summary}
                     onChange={(e) => updateEntry(entry.id, 'summary', e.target.value)}
                     required
+                    disabled={isSubmitting}
                   />
 
                   {/* Daily Hours - Vertical List */}
@@ -473,6 +483,7 @@ export function BulkEntryClient({
                               parseFloat(e.target.value) || 0
                             )}
                             className="w-20 text-center"
+                            disabled={isSubmitting}
                           />
                         </div>
                       );
@@ -489,6 +500,7 @@ export function BulkEntryClient({
               onClick={addEntry}
               variant="outline"
               className="flex-1"
+              disabled={isSubmitting}
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Entry
@@ -498,7 +510,14 @@ export function BulkEntryClient({
               disabled={isSubmitting || entries.length === 0}
               className="flex-1"
             >
-              Submit
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit'
+              )}
             </Button>
           </div>
         </div>
@@ -528,12 +547,15 @@ export function BulkEntryClient({
           </AlertDialog>
         )}
       </div>
+      </>
     );
   }
 
   // Desktop View - Original Grid Layout
   return (
-    <div className="w-full min-h-screen">
+    <>
+      <SubmissionLoader isSubmitting={isSubmitting} />
+      <div className="w-full min-h-screen">
       <div className="max-w-6xl mx-auto p-2 sm:p-4 lg:p-6 space-y-3 sm:space-y-6">
       {/* Compact Header */}
       <div className="space-y-2">
@@ -550,6 +572,7 @@ export function BulkEntryClient({
               size="sm"
               onClick={() => navigateWeek('prev')}
             className="h-9 w-9 p-0 shrink-0"
+            disabled={isSubmitting}
             >
               <ChevronLeft className="h-3 w-3" />
             </Button>
@@ -561,6 +584,7 @@ export function BulkEntryClient({
               size="sm"
               onClick={() => navigateWeek('next')}
             className="h-9 w-9 p-0 shrink-0"
+            disabled={isSubmitting}
             >
               <ChevronRight className="h-3 w-3" />
             </Button>
@@ -572,6 +596,7 @@ export function BulkEntryClient({
           onValueChange={(value) => {
             router.push(`/bulk-entry?projectId=${value}&weekStart=${currentWeekStart}`);
           }}
+          disabled={isSubmitting}
           >
           <SelectTrigger className="w-full h-9 text-sm">
               <SelectValue />
@@ -591,6 +616,7 @@ export function BulkEntryClient({
             onClick={addEntry}
             variant="outline"
             className="flex-1 h-9 text-sm"
+            disabled={isSubmitting}
           >
             <Plus className="h-3 w-3 mr-2" />
             Add Entry
@@ -600,7 +626,14 @@ export function BulkEntryClient({
             disabled={isSubmitting || entries.length === 0}
             className="flex-1 h-9 text-sm"
           >
-            Submit
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              'Submit'
+            )}
           </Button>
         </div>
       </div>
@@ -686,6 +719,7 @@ export function BulkEntryClient({
                       size="sm"
                       onClick={() => removeEntry(entry.id)}
                       className="text-destructive hover:text-destructive min-h-[44px] min-w-[44px] p-0 shrink-0"
+                      disabled={isSubmitting}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -694,6 +728,7 @@ export function BulkEntryClient({
                       <Select
                         value={entry.activityId.toString()}
                         onValueChange={(value) => updateEntry(entry.id, 'activityId', parseInt(value))}
+                        disabled={isSubmitting}
                       >
                         <SelectTrigger className="w-full min-h-[44px]">
                           <div className="truncate w-full text-left text-sm">
@@ -718,6 +753,7 @@ export function BulkEntryClient({
                         <Select
                           value={entry.issueId?.toString() || 'none'}
                           onValueChange={(value) => updateEntry(entry.id, 'issueId', value === 'none' ? undefined : parseInt(value))}
+                          disabled={isSubmitting}
                         >
                           <SelectTrigger className="w-full min-h-[44px]">
                             <div className="truncate w-full text-left text-sm">
@@ -748,6 +784,7 @@ export function BulkEntryClient({
                         onChange={(e) => updateEntry(entry.id, 'summary', e.target.value)}
                         className="w-full min-h-[44px] text-sm"
                         required
+                        disabled={isSubmitting}
                       />
                     </div>
                   </div>
@@ -771,6 +808,7 @@ export function BulkEntryClient({
                                 parseFloat(e.target.value) || 0
                               )}
                               className={`text-center px-0 text-[11px] sm:text-xs ${isMobile ? 'h-8' : 'h-9 sm:h-10'}`}
+                              disabled={isSubmitting}
                             />
                           </div>
                         ))}
@@ -813,5 +851,6 @@ export function BulkEntryClient({
         </AlertDialog>
       )}
     </div>
+    </>
   );
 }
