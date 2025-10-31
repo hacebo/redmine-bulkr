@@ -94,6 +94,7 @@ export function EnhancedTimeEntryForm({
     title: string;
     description: string;
     onConfirm: () => void;
+    onCancel: () => void;
   } | null>(null);
   const dateButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -175,7 +176,7 @@ export function EnhancedTimeEntryForm({
   };
 
   const showConfirmDialog = (title: string, description: string): Promise<void> => {
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       setConfirmDialog({
         open: true,
         title,
@@ -183,6 +184,10 @@ export function EnhancedTimeEntryForm({
         onConfirm: () => {
           setConfirmDialog(null);
           resolve();
+        },
+        onCancel: () => {
+          setConfirmDialog(null);
+          reject(new Error('User cancelled'));
         },
       });
     });
@@ -453,7 +458,14 @@ export function EnhancedTimeEntryForm({
 
       {/* Confirmation Dialog */}
       {confirmDialog && (
-        <AlertDialog open={confirmDialog.open} onOpenChange={() => setConfirmDialog(null)}>
+        <AlertDialog 
+          open={confirmDialog.open} 
+          onOpenChange={(open) => {
+            if (!open) {
+              confirmDialog.onCancel();
+            }
+          }}
+        >
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
@@ -462,7 +474,7 @@ export function EnhancedTimeEntryForm({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setConfirmDialog(null)}>
+              <AlertDialogCancel onClick={confirmDialog.onCancel}>
                 Cancel
               </AlertDialogCancel>
               <AlertDialogAction onClick={confirmDialog.onConfirm}>

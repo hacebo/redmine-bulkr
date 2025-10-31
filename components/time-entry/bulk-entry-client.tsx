@@ -526,7 +526,11 @@ export function BulkEntryClient({
         {confirmDialog && (
           <AlertDialog
             open={confirmDialog.open}
-            onOpenChange={(open) => !open && setConfirmDialog(null)}
+            onOpenChange={(open) => {
+              if (!open) {
+                confirmDialog.onCancel?.();
+              }
+            }}
           >
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -536,7 +540,10 @@ export function BulkEntryClient({
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel onClick={() => setConfirmDialog(null)}>
+                <AlertDialogCancel onClick={() => {
+                  confirmDialog.onCancel?.();
+                  setConfirmDialog(null);
+                }}>
                   Cancel
                 </AlertDialogCancel>
                 <AlertDialogAction onClick={confirmDialog.onConfirm}>
@@ -827,7 +834,11 @@ export function BulkEntryClient({
       {confirmDialog && (
         <AlertDialog
           open={confirmDialog.open}
-          onOpenChange={(open) => !open && setConfirmDialog(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              confirmDialog.onCancel?.();
+            }
+          }}
         >
           <AlertDialogContent>
             <AlertDialogHeader>
